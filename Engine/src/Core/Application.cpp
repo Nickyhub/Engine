@@ -3,14 +3,15 @@
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
 #include <enpch.h>
+#include "Events/Event.h"
 
 namespace Engine {
 
 	Application::Application()
 	{
+		m_LayerStack = new LayerStack();
+		m_Window = new WindowsWindow();
 		m_Running = true;
-		m_Window = WindowsWindow();
-		m_LayerStack = LayerStack();
 	}
 
 
@@ -27,10 +28,12 @@ namespace Engine {
 	void Application::Run()
 	{
 		Layer layer;
-		m_LayerStack.PushLayer(&layer);
+		m_LayerStack->PushLayer(&layer);
+		EventDispatcher::Subscribe(EventType::WindowClose, &layer);
+
 
 		while (m_Running) {
-			m_Window.OnUpdate();
+			m_Window->OnUpdate();
 		}
 	}
 

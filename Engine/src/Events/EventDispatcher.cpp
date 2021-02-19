@@ -7,13 +7,13 @@
 #include "Core/LayerStack.h"
 
 namespace Engine {
-	std::vector<CallbackData>::iterator EventDispatcher::m_CallbackInsert;
+	unsigned int EventDispatcher::m_InsertIndex = 0;
 	std::vector<CallbackData> EventDispatcher::m_Callbacks;
 
 	void EventDispatcher::Subscribe(EventType type, Layer* layer)
 	{
 		CallbackData temp = { type, layer};
-		m_CallbackInsert = m_Callbacks.emplace(m_CallbackInsert, temp);
+		m_Callbacks.emplace(m_Callbacks.begin() + m_InsertIndex, temp);
 	}
 
 	void EventDispatcher::Unsubscribe(int layerID)
@@ -31,6 +31,7 @@ namespace Engine {
 		}
 		if (to_delete) {
 			m_Callbacks.erase(to_unsubsribce);
+			m_InsertIndex--;
 		}
 	}
 

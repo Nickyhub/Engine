@@ -26,7 +26,7 @@ namespace Engine
 
 	void Layer::OnEvent(const Event& e)
 	{
-		
+		std::cout << "Eyo alles hat geklappt lol" << std::endl;
 	}
 
 	void Layer::OnUpdate()

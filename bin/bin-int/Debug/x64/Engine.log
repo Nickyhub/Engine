@@ -1,12 +1,4 @@
-﻿  enpch.cpp
-  Application.cpp
-  EntryPoint.cpp
-  Layer.cpp
-  LayerStack.cpp
-  Log.cpp
-  EventDispatcher.cpp
-  WindowsWindow.cpp
-  Generating Code...
+﻿  WindowsWindow.cpp
 LINK : warning LNK4044: unrecognized option '/NODEFAULTLIB.LIBCMT'; ignored
 LINK : warning LNK4098: defaultlib 'LIBCMT' conflicts with use of other libs; use /NODEFAULTLIB:library
 glew32s.lib(glew.obj) : warning LNK4099: PDB 'vc120.pdb' was not found with 'glew32s.lib(glew.obj)' or at 'D:\Dev\Visual Studio Projekte\Engine\bin\bin\Debug\x64\vc120.pdb'; linking object as if no debug info

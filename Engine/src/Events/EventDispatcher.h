@@ -22,7 +22,7 @@ namespace Engine {
 		static bool Dispatch(const Event& e);
 
 	private:
-		static std::vector<CallbackData>::iterator m_CallbackInsert;
+		static unsigned int m_InsertIndex;
 		static std::vector<CallbackData> m_Callbacks;
 	};
 

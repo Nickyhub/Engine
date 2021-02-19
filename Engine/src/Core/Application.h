@@ -15,12 +15,12 @@ namespace Engine {
 		void Run();
 		~Application();
 
-		LayerStack GetLayerStack() { return m_LayerStack; }
+		LayerStack GetLayerStack() { return *m_LayerStack; }
 		void OnEvent(const Event& e);
 
 	private:
-		LayerStack m_LayerStack;
-		WindowsWindow m_Window;
+		LayerStack* m_LayerStack;
+		WindowsWindow* m_Window;
 		bool m_Running;
 	};
 }

@@ -4,7 +4,6 @@
 
 #include <enpch.h>
 #include "Platform/Windows/WindowsWindow.h"
-#include "Events/Events.h"
 
 namespace Engine {
 
@@ -152,6 +151,7 @@ namespace Engine {
 			{
 				PostQuitMessage(0);
 				EN_INFO("Window Closed!");
+				//WindowCloseEvent e;
 				return 0;
 			}
 		}
