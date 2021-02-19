@@ -2,8 +2,6 @@
 
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
-#include "Log.h"
-
 #ifdef _DEBUG
 	#define ASSERT(x, ...) if(!x) {EN_ERROR(__VA_ARGS__); __debugbreak();}
 #else

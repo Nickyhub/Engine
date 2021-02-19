@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <enpch.h>
 #include "Layer.h"
 
 namespace Engine {
@@ -22,8 +21,7 @@ namespace Engine {
 		std::vector<Layer*>::iterator end() { return m_Layers.end(); };
 
 	private:
-		int m_IDCounter;
+		unsigned int m_IDCounter;
 		std::vector<Layer*> m_Layers;
-		std::vector<Layer*>::iterator m_LayerInsert;
 	};
 }

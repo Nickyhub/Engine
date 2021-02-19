@@ -2,11 +2,9 @@
 
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
-#include "Platform/Windows/WindowsWindow.h"
-#include "Core/Log.h"
-#include "Core/Core.h"
-#include "Events/Events.h"
 #include <enpch.h>
+#include "Platform/Windows/WindowsWindow.h"
+#include "Events/Events.h"
 
 namespace Engine {
 

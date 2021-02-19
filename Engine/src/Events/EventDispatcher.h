@@ -4,9 +4,7 @@
 
 #pragma once
 
-#include <enpch.h>
 #include "Event.h"
-#include "Core/Application.h"
 #include "Core/Layer.h"
 
 namespace Engine {

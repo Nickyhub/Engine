@@ -6,7 +6,6 @@
 
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #pragma once
-#include <enpch.h>
 
 namespace Engine {
 	enum class EventType {
