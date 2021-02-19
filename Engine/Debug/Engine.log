@@ -1,0 +1,8 @@
+﻿  enpch.cpp
+D:\Dev\Visual Studio Projekte\Engine\Engine\src\Events\EventDispatcher.h(16,16): error C3083: 'Layer': the symbol to the left of a '::' must be a type
+D:\Dev\Visual Studio Projekte\Engine\Engine\src\Events\EventDispatcher.h(16,31): error C2653: 'Engine': is not a class or namespace name
+D:\Dev\Visual Studio Projekte\Engine\Engine\src\Events\EventDispatcher.h(12): message : see declaration of 'Engine'
+D:\Dev\Visual Studio Projekte\Engine\Engine\src\Events\EventDispatcher.h(24,54): error C3083: 'Layer': the symbol to the left of a '::' must be a type
+D:\Dev\Visual Studio Projekte\Engine\Engine\src\Events\EventDispatcher.h(24,69): error C2653: 'Engine': is not a class or namespace name
+D:\Dev\Visual Studio Projekte\Engine\Engine\src\Events\EventDispatcher.h(12): message : see declaration of 'Engine'
+D:\Dev\Visual Studio Projekte\Engine\Engine\src\Events\WindowEvent.h(40,6): warning C4834: discarding return value of function with 'nodiscard' attribute

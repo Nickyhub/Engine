@@ -1,0 +1,32 @@
+﻿  Application.cpp
+  EntryPoint.cpp
+  Layer.cpp
+  LayerStack.cpp
+  Log.cpp
+  enpch.cpp
+  EventDispatcher.cpp
+  WindowsWindow.cpp
+  Generating Code...
+EntryPoint.obj : error LNK2005: "class std::basic_ostream<char,struct std::char_traits<char> > & __cdecl Engine::operator<<(class std::basic_ostream<char,struct std::char_traits<char> > &,class Engine::Event const &)" (??6Engine@@YAAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@AEAV12@AEBVEvent@0@@Z) already defined in Application.obj
+EntryPoint.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator&(enum Engine::EventCategory,enum Engine::EventCategory)" (??IEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+EntryPoint.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator|(enum Engine::EventCategory,enum Engine::EventCategory)" (??UEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+Layer.obj : error LNK2005: "class std::basic_ostream<char,struct std::char_traits<char> > & __cdecl Engine::operator<<(class std::basic_ostream<char,struct std::char_traits<char> > &,class Engine::Event const &)" (??6Engine@@YAAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@AEAV12@AEBVEvent@0@@Z) already defined in Application.obj
+Layer.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator&(enum Engine::EventCategory,enum Engine::EventCategory)" (??IEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+Layer.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator|(enum Engine::EventCategory,enum Engine::EventCategory)" (??UEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+LayerStack.obj : error LNK2005: "class std::basic_ostream<char,struct std::char_traits<char> > & __cdecl Engine::operator<<(class std::basic_ostream<char,struct std::char_traits<char> > &,class Engine::Event const &)" (??6Engine@@YAAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@AEAV12@AEBVEvent@0@@Z) already defined in Application.obj
+LayerStack.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator&(enum Engine::EventCategory,enum Engine::EventCategory)" (??IEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+LayerStack.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator|(enum Engine::EventCategory,enum Engine::EventCategory)" (??UEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+Log.obj : error LNK2005: "class std::basic_ostream<char,struct std::char_traits<char> > & __cdecl Engine::operator<<(class std::basic_ostream<char,struct std::char_traits<char> > &,class Engine::Event const &)" (??6Engine@@YAAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@AEAV12@AEBVEvent@0@@Z) already defined in Application.obj
+Log.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator&(enum Engine::EventCategory,enum Engine::EventCategory)" (??IEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+Log.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator|(enum Engine::EventCategory,enum Engine::EventCategory)" (??UEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+enpch.obj : error LNK2005: "class std::basic_ostream<char,struct std::char_traits<char> > & __cdecl Engine::operator<<(class std::basic_ostream<char,struct std::char_traits<char> > &,class Engine::Event const &)" (??6Engine@@YAAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@AEAV12@AEBVEvent@0@@Z) already defined in Application.obj
+enpch.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator&(enum Engine::EventCategory,enum Engine::EventCategory)" (??IEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+enpch.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator|(enum Engine::EventCategory,enum Engine::EventCategory)" (??UEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+EventDispatcher.obj : error LNK2005: "class std::basic_ostream<char,struct std::char_traits<char> > & __cdecl Engine::operator<<(class std::basic_ostream<char,struct std::char_traits<char> > &,class Engine::Event const &)" (??6Engine@@YAAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@AEAV12@AEBVEvent@0@@Z) already defined in Application.obj
+EventDispatcher.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator&(enum Engine::EventCategory,enum Engine::EventCategory)" (??IEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+EventDispatcher.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator|(enum Engine::EventCategory,enum Engine::EventCategory)" (??UEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+WindowsWindow.obj : error LNK2005: "class std::basic_ostream<char,struct std::char_traits<char> > & __cdecl Engine::operator<<(class std::basic_ostream<char,struct std::char_traits<char> > &,class Engine::Event const &)" (??6Engine@@YAAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@AEAV12@AEBVEvent@0@@Z) already defined in Application.obj
+WindowsWindow.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator&(enum Engine::EventCategory,enum Engine::EventCategory)" (??IEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+WindowsWindow.obj : error LNK2005: "enum Engine::EventCategory __cdecl Engine::operator|(enum Engine::EventCategory,enum Engine::EventCategory)" (??UEngine@@YA?AW4EventCategory@0@W410@0@Z) already defined in Application.obj
+LINK : warning LNK4098: defaultlib 'LIBCMT' conflicts with use of other libs; use /NODEFAULTLIB:library
+D:\Dev\Visual Studio Projekte\Engine\bin\bin\Debug\x64\Engine.exe : fatal error LNK1169: one or more multiply defined symbols found

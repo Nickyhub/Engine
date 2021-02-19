@@ -37,7 +37,7 @@ namespace Engine {
 		{
 			std::stringstream ss;
 			ss << "WindowResize: " << m_Width << ", " << m_Height;
-			ss.str();
+			return ss.str();
 		}
 
 	private:

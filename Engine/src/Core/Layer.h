@@ -3,7 +3,6 @@
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
 #pragma once
-#include "Events/EventDispatcher.h"
 #include "Events/Event.h"
 
 namespace Engine {
@@ -21,7 +20,7 @@ namespace Engine {
 		bool IsActive() { return m_Active; }
 		void SetActive(bool active);
 
-		void SetID(int ID) { m_ID; }
+		void SetID(int ID) { m_ID = ID; }
 		int GetID() { return m_ID; }
 
 	private:
