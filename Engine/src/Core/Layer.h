@@ -21,11 +21,8 @@ namespace Engine {
 		bool IsActive() { return m_Active; }
 		void SetActive(bool active);
 
-		void Notify(int layerID, bool active);
-
 		void SetID(int ID) { m_ID; }
 		int GetID() { return m_ID; }
-		void(Engine::Layer::*m_EventCallback)(const Event& e);
 
 	private:
 		int m_ID;

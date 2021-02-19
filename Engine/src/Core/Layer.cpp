@@ -13,7 +13,6 @@ namespace Engine
 		m_Name = name;
 		m_ID = 0;
 		m_Active = false;
-		m_EventCallback = OnEvent;
 	}
 
 	Layer::~Layer() {
@@ -40,17 +39,9 @@ namespace Engine
 		//Clear up memory
 	}
 
-	//This method should not be overwritten. If you want to override this make sure you call
-	//notify because if not the EventDispatcher may call Event Callbacks of inactive layers
 	void Layer::SetActive(bool active)
 	{
 		m_Active = active;
-		Notify(m_ID, active);
-	}
-
-	void Layer::Notify(int layerID, bool active)
-	{
-		EventDispatcher::Notify(m_ID, m_Active);
 	}
 
 }

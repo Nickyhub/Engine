@@ -10,9 +10,9 @@ namespace Engine {
 	std::vector<CallbackData>::iterator EventDispatcher::m_CallbackInsert;
 	std::vector<CallbackData> EventDispatcher::m_Callbacks;
 
-	void EventDispatcher::Subscribe(EventType type, void(Engine::Layer::*OnEvent)(const Event& e), int layerID)
+	void EventDispatcher::Subscribe(EventType type, Layer* layer)
 	{
-		CallbackData temp = { type, OnEvent, layerID, true };
+		CallbackData temp = { type, layer};
 		m_CallbackInsert = m_Callbacks.emplace(m_CallbackInsert, temp);
 	}
 
@@ -23,7 +23,7 @@ namespace Engine {
 		bool to_delete = false;
 
 		for (CallbackData& calldata : m_Callbacks) {
-			if (calldata.layerID == layerID) {
+			if (calldata.layer->GetID() == layerID) {
 				to_delete = true;
 				*to_unsubsribce = calldata;
 				break;
@@ -37,21 +37,12 @@ namespace Engine {
 	bool EventDispatcher::Dispatch(const Event& e)
 	{
 		for (CallbackData& calldata : m_Callbacks) {
-			if (calldata.type == e.GetEventType() && calldata.isActive) {
-				*calldata.OnEvent(e);
+			if (calldata.type == e.GetEventType() && calldata.layer->IsActive()) {
+				calldata.layer->OnEvent(e);
 			}
 		}
 		//TODO überarbeiten
 		return true;
-	}
-
-	void EventDispatcher::Notify(int layerID, bool active)
-	{
-		for (CallbackData& calldata : m_Callbacks) {
-			if (calldata.layerID == layerID) {
-				calldata.isActive = active;
-			}
-		}
 	}
 
 }

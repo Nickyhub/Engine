@@ -28,7 +28,6 @@ namespace Engine {
 	{
 		Layer layer;
 		m_LayerStack.PushLayer(&layer);
-		EventDispatcher::Subscribe(EventType::WindowClose, layer.m_EventCallback, layer.GetID());
 
 		while (m_Running) {
 			m_Window.OnUpdate();

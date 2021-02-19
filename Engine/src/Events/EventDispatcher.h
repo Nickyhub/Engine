@@ -13,18 +13,15 @@ namespace Engine {
 
 	struct CallbackData {
 		EventType type;
-		void(Engine::Layer::*OnEvent)(const Event& e);
-		int layerID;
-		bool isActive;
+		Layer* layer;
 	};
 
 	class EventDispatcher
 	{
 	public:
-		static void Subscribe(EventType type, void(Engine::Layer::*OnEvent)(const Event& e), int layerID);
+		static void Subscribe(EventType type, Layer* layer);
 		static void Unsubscribe(int layerID);
 		static bool Dispatch(const Event& e);
-		static void Notify(int layerID, bool active);
 
 	private:
 		static std::vector<CallbackData>::iterator m_CallbackInsert;
