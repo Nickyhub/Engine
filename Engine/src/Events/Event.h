@@ -41,7 +41,7 @@ namespace Engine {
 		virtual EventCategory GetCategoryFlags() const = 0;
 		virtual std::string ToString() const = 0;
 
-		virtual bool IsInCategory(EventCategory category) { return static_cast<bool> (GetCategoryFlags() & category); }
+		bool IsInCategory(EventCategory category) { return static_cast<bool> (GetCategoryFlags() & category); }
 		bool IsHandled() { return m_Handled; }
 		void SetStatus(bool status) { m_Handled = status; }
 

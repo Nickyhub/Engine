@@ -8,22 +8,12 @@
 #include "Core/Layer.h"
 
 namespace Engine {
-
-	struct CallbackData {
-		EventType type;
-		Layer* layer;
-	};
-
 	class EventDispatcher
 	{
 	public:
-		static void Subscribe(EventType type, Layer* layer);
-		static void Unsubscribe(int layerID);
 		static bool Dispatch(const Event& e);
 
 	private:
-		static unsigned int m_InsertIndex;
-		static std::vector<CallbackData> m_Callbacks;
 	};
 
 }

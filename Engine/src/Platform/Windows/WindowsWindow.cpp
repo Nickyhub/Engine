@@ -22,7 +22,7 @@ namespace Engine {
 
 		//Gr��e der Struktur zwischenspreichern
 		m_WndClass.cbSize = sizeof(WNDCLASSEX);
-		
+
 		//Titel des Fensters
 		const TCHAR classname[] = TEXT("Engine");
 
@@ -84,7 +84,7 @@ namespace Engine {
 	{
 		//Adjust the window so the space is the resolution provided for the window
 		//Window is gonna end up a little bigger because of the edges which dont count to the client space
-		RECT r = { 0, 0, (long) m_Data.m_Width, (long) m_Data.m_Height };
+		RECT r = { 0, 0, (long)m_Data.m_Width, (long)m_Data.m_Height };
 		AdjustWindowRect(&r, m_Style, FALSE);
 
 		PIXELFORMATDESCRIPTOR pfd =
@@ -112,7 +112,7 @@ namespace Engine {
 		int  pfn;
 		pfn = ChoosePixelFormat(m_DC, &pfd);
 		SetPixelFormat(m_DC, pfn, &pfd);
-		
+
 		m_GLContext = wglCreateContext(m_DC);
 		bool a = wglMakeCurrent(m_DC, m_GLContext);
 		return a;
@@ -127,8 +127,7 @@ namespace Engine {
 		TranslateMessage(&message);
 		DispatchMessage(&message);
 
-
-		glClearColor(0.0f, 5.0f, 1.0f, 1.0f);
+		glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 		auto a = glGetError();
 		SwapBuffers(m_DC);
@@ -146,18 +145,19 @@ namespace Engine {
 
 	LRESULT CALLBACK WindowsWindow::CallbackFn(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
+		LRESULT result = 0;
 		switch (message) {
-			case WM_DESTROY:
-			{
-				PostQuitMessage(0);
-				EN_INFO("Window Closed!");
-				//WindowCloseEvent e;
-				return 0;
-			}
+		case WM_DESTROY:
+		{
+			WindowCloseEvent e;
+			EventDispatcher::Dispatch(e);
+			break;
 		}
-
-		return (DefWindowProc(hWnd, message, wParam, lParam));
-		//TODO Implement EventCallback function and event system and hook it up with this method I guess
+		default:
+		{
+			result = (DefWindowProc(hWnd, message, wParam, lParam));
+		}
+		}
+		return result;
 	}
-
 }

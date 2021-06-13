@@ -7,8 +7,8 @@
 int main() {
 	Engine::Log::Init();
 	
-	Engine::Application app;
-	app.Run();
+	Engine::Application::Init();
+	Engine::Application::Run();
 
 	return 0;
 }

@@ -12,7 +12,7 @@ namespace Engine
 	{
 		m_Name = name;
 		m_ID = 0;
-		m_Active = false;
+		m_Active = true;
 	}
 
 	Layer::~Layer() {

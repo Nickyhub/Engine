@@ -6,21 +6,23 @@
 #include "Platform/Windows/WindowsWindow.h"
 #include "LayerStack.h"
 #include "Events/Events.h"
+#include "ApplicationLayer.h"
 
 namespace Engine {
 	class Application
 	{
 	public:
-		Application();
-		void Run();
-		~Application();
+		static void Init();
+		static void Run();
 
-		LayerStack GetLayerStack() { return *m_LayerStack; }
-		void OnEvent(const Event& e);
+		static LayerStack* GetLayerStack() { return m_LayerStack; }
+		static void OnEvent(const Event& e); 
 
+		friend ApplicationLayer;
 	private:
-		LayerStack* m_LayerStack;
-		WindowsWindow* m_Window;
-		bool m_Running;
+		static void CreateLayers();
+		static LayerStack* m_LayerStack;
+		static WindowsWindow* m_Window;
+		static bool m_Running;
 	};
 }

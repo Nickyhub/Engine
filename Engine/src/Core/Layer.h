@@ -12,13 +12,13 @@ namespace Engine {
 		Layer(const std::string& name = "Layer");
 		~Layer();
 
-		void OnAttach();
-		void OnEvent(const Event& e);
-		void OnUpdate();
-		void OnDetach();
+		virtual void OnAttach();
+		virtual void OnEvent(const Event& e);
+		virtual void OnUpdate();
+		virtual void OnDetach();
 
-		bool IsActive() { return m_Active; }
-		void SetActive(bool active);
+		virtual bool IsActive() { return m_Active; }
+		virtual void SetActive(bool active);
 
 		void SetID(int ID) { m_ID = ID; }
 		int GetID() { return m_ID; }
