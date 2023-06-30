@@ -58,9 +58,8 @@ bool VulkanRenderer::Initialize() {
 
 	// Create VertexBuffer Right before the graphics pipeline
 	if (!VulkanBufferUtils::GeneratePlaneData(&m_VulkanData.s_VertexBuffer, &m_VulkanData.s_IndexBuffer, 10, 10, 2, 2) ||
-		!VulkanBufferUtils::CreateVertexBuffer(m_VulkanData.s_VertexBuffer)
-		//!VulkanBufferUtils::CreateIndexBuffer(m_VulkanData.s_IndexBuffer
-		) {
+		!VulkanBufferUtils::CreateVertexBuffer(m_VulkanData.s_VertexBuffer) ||
+		!VulkanBufferUtils::CreateIndexBuffer(m_VulkanData.s_IndexBuffer)) {
 		EN_ERROR("Failed to create vertex buffer. Shutting down.");
 		return false;
 	}
@@ -138,10 +137,10 @@ bool VulkanRenderer::DrawFrame(VulkanData* data) {
 	VkBuffer vertexBuffers[] = {m_VulkanData.s_VertexBuffer.s_Handle};
 	VkDeviceSize offsets[] = { 0 };
 	vkCmdBindVertexBuffers(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, 0, 1, vertexBuffers, offsets);
-	//vkCmdBindIndexBuffer(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, data->s_IndexBuffer.s_Handle, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, data->s_IndexBuffer.s_Handle, 0, VK_INDEX_TYPE_UINT32);
 
-	//vkCmdDrawIndexed(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, static_cast<uint32_t>(data->s_IndexBuffer.s_Indices.Size()), 1, 0, 0, 0);
-	vkCmdDraw(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, static_cast<uint32_t>(m_VulkanData.s_VertexBuffer.s_Vertices.Size()), 1, 0, 0);
+	vkCmdDrawIndexed(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, static_cast<uint32_t>(data->s_IndexBuffer.s_Indices.Size()), 1, 0, 0, 0);
+	//vkCmdDraw(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, static_cast<uint32_t>(m_VulkanData.s_VertexBuffer.s_Vertices.Size()), 1, 0, 0);
 	return true;
 }
 

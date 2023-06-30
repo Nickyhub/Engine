@@ -67,10 +67,6 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	// Vertex input 
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 0;
-	vertexInputInfo.pVertexBindingDescriptions = nullptr;
-	vertexInputInfo.vertexAttributeDescriptionCount = 0;
-	vertexInputInfo.pVertexAttributeDescriptions = nullptr;
 	// TODO not hardcode this dude
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
 	vertexInputInfo.vertexAttributeDescriptionCount = 2;
@@ -80,7 +76,7 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	// Input assembly
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 	inputAssembly.primitiveRestartEnable = VK_FALSE;
 
 	// Viewport
@@ -109,7 +105,7 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	rasterizer.depthClampEnable = VK_FALSE;
 	// Maybe support wireframe rendering?
 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL /*VK_POLYGON_MODE_LINE*/;
-	rasterizer.cullMode = VK_CULL_MODE_NONE;
+	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
 	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.depthBiasConstantFactor = 0.0f;
@@ -130,7 +126,7 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	// Depth and stencil testing
 	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable = VK_TRUE;
+	colorBlendAttachment.blendEnable = VK_FALSE;
 	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
 	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
 	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
@@ -178,9 +174,7 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	pipelineInfo.layout = outPipeline->s_Layout;
 	pipelineInfo.renderPass = outPipeline->s_Renderpass.s_Handle;
 	pipelineInfo.subpass = 0;
-
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-	pipelineInfo.basePipelineIndex = -1;
 
 	VK_CHECK(vkCreateGraphicsPipelines(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, VulkanRenderer::m_VulkanData.s_Allocator, &outPipeline->s_Handle));
 	EN_DEBUG("Graphics pipeline created.");

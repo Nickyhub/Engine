@@ -56,8 +56,8 @@ bool VulkanBufferUtils::CreateVertexBuffer(VertexBuffer& vertexBuffer) {
 	attributeDescriptions[1].offset = offsetof(Vertex, s_Colour);
 
 	// Copy the produced data to the buffer
-	vertexBuffer.s_AttributeDescriptions.PushBack(attributeDescriptions[0]);
 	vertexBuffer.s_AttributeDescriptions.PushBack(attributeDescriptions[1]);
+	vertexBuffer.s_AttributeDescriptions.PushBack(attributeDescriptions[0]);
 
 	vertexBuffer.s_BindingDescription = bindingDescription;
 
@@ -210,7 +210,7 @@ bool VulkanBufferUtils::GeneratePlaneData(VertexBuffer* outVertexBuffer, IndexBu
 	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, -0.5f, 0.5f}, { 1.0f, 0.0f, 0.0f, 0.0f } });
 	outVertexBuffer->s_Vertices.PushBack({ {0.5f, -0.5f, 0.5f}, {0.0f, 1.0f, 0.0f, 0.0f} });
 	outVertexBuffer->s_Vertices.PushBack({ {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, 1.0f, 0.0f} });
-	//outVertexBuffer->s_Vertices.PushBack({ {-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f} });
+	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f} });
 
 	outIndexBuffer->s_Indices.PushBack(0);
 	outIndexBuffer->s_Indices.PushBack(1);
