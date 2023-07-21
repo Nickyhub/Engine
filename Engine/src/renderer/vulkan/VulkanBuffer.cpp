@@ -1,3 +1,10 @@
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
+
 #include "VulkanBuffer.hpp"
 #include "containers/Array.hpp"
 #include "VulkanRenderer.hpp"
@@ -44,20 +51,29 @@ bool VulkanBufferUtils::CreateVertexBuffer(VertexBuffer& vertexBuffer) {
 	bindingDescription.stride = sizeof(Vertex);
 	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-	Array<VkVertexInputAttributeDescription, 2> attributeDescriptions;
+	Array<VkVertexInputAttributeDescription, 3> attributeDescriptions;
+	// inPosition
 	attributeDescriptions[0].binding = 0;
 	attributeDescriptions[0].location = 0;
 	attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
 	attributeDescriptions[0].offset = offsetof(Vertex, s_Position);
 
+	// inColor
 	attributeDescriptions[1].binding = 0;
 	attributeDescriptions[1].location = 1;
 	attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 	attributeDescriptions[1].offset = offsetof(Vertex, s_Colour);
 
+	// inTexCoord
+	attributeDescriptions[2].binding = 0;
+	attributeDescriptions[2].location = 2;
+	attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+	attributeDescriptions[2].offset = offsetof(Vertex, s_TexCoord);
+
 	// Copy the produced data to the buffer
-	vertexBuffer.s_AttributeDescriptions.PushBack(attributeDescriptions[1]);
 	vertexBuffer.s_AttributeDescriptions.PushBack(attributeDescriptions[0]);
+	vertexBuffer.s_AttributeDescriptions.PushBack(attributeDescriptions[1]);
+	vertexBuffer.s_AttributeDescriptions.PushBack(attributeDescriptions[2]);
 
 	vertexBuffer.s_BindingDescription = bindingDescription;
 
@@ -138,45 +154,63 @@ bool VulkanBufferUtils::CreateIndexBuffer(IndexBuffer& indexBuffer) {
 	return true;
 }
 
+bool VulkanBufferUtils::CreateUniformBuffer(UniformBuffer& buffer) {
+	VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+	int framesInFlight = VulkanRenderer::m_VulkanData.s_FramesInFlight;
+
+	buffer.s_UniformBuffers.Resize(framesInFlight);
+	buffer.s_UniformBuffersMemory.Resize(framesInFlight);
+	buffer.s_UniformBuffersMapped.Resize(framesInFlight);
+
+	for (int i = 0; i < framesInFlight; i++) {
+		CreateBuffer(
+			bufferSize,
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			buffer.s_UniformBuffersMemory[i],
+			buffer.s_UniformBuffers[i]);
+		vkMapMemory(
+			VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice,
+			buffer.s_UniformBuffersMemory[i],
+			0,
+			bufferSize,
+			0,
+			&buffer.s_UniformBuffersMapped[i]);
+	}
+
+	return true;
+}
+
+void VulkanBufferUtils::UpdateUniformBuffer(UniformBuffer& buffer) {
+	VulkanData* d = &VulkanRenderer::m_VulkanData;
+
+	static auto startTime = std::chrono::high_resolution_clock::now();
+
+	auto currentTime = std::chrono::high_resolution_clock::now();
+	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+	UniformBufferObject ubo{};
+	ubo.s_Model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.s_View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.s_Proj = glm::perspective(
+		glm::radians(45.0f),
+		d->s_Swapchain.s_Width / (float)d->s_Swapchain.s_Height,
+		0.1f,
+		10.0f);
+	ubo.s_Proj[1][1] *=-1;
+
+	Memory::Copy(buffer.s_UniformBuffersMapped[d->s_CurrentFrame], &ubo, sizeof(ubo));
+
+}
+
 bool VulkanBufferUtils::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-	// Get ptr to vulkan data for cosmetic reasons
-	VulkanData* vulkanData = &VulkanRenderer::m_VulkanData;
-
-	// Create command Buffer to copy original buffer
-	VkCommandBufferAllocateInfo allocInfo{};
-	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandPool = vulkanData->s_Device.s_CommandPool;
-	allocInfo.commandBufferCount = 1;
-
-	VkCommandBuffer commandBuffer;
-	VK_CHECK(vkAllocateCommandBuffers(vulkanData->s_Device.s_LogicalDevice, &allocInfo, &commandBuffer));
-
-	// Begin to record command buffer
-	VkCommandBufferBeginInfo beginInfo{};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+	VkCommandBuffer commandBuffer = VulkanCommandbufferUtils::BeginSingleUseCommands();
 
 	VkBufferCopy copyRegion{};
-	copyRegion.srcOffset = 0;
-	copyRegion.dstOffset = 0;
 	copyRegion.size = size;
 	vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-	VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
-
-	// Execute recorded command buffer
-	VkSubmitInfo submitInfo{};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffer;
-
-	VK_CHECK(vkQueueSubmit(vulkanData->s_Device.s_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE));
-	VK_CHECK(vkQueueWaitIdle(vulkanData->s_Device.s_GraphicsQueue));
-
-	// Clean up command buffer
-	vkFreeCommandBuffers(vulkanData->s_Device.s_LogicalDevice, vulkanData->s_Device.s_CommandPool, 1, &commandBuffer);
+	VulkanCommandbufferUtils::EndSingleUseCommands(commandBuffer);
 	return true;
 }
 
@@ -207,10 +241,10 @@ bool VulkanBufferUtils::GeneratePlaneData(VertexBuffer* outVertexBuffer, IndexBu
 		}
 	}*/
 
-	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, -0.5f, 0.5f}, { 1.0f, 0.0f, 0.0f, 0.0f } });
-	outVertexBuffer->s_Vertices.PushBack({ {0.5f, -0.5f, 0.5f}, {0.0f, 1.0f, 0.0f, 0.0f} });
-	outVertexBuffer->s_Vertices.PushBack({ {0.5f, 0.5f, 0.5f}, {0.0f, 0.0f, 1.0f, 0.0f} });
-	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f} });
+	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, -0.5f, 0.0f}, { 1.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 0.0f} });
+	outVertexBuffer->s_Vertices.PushBack({ {0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} });
+	outVertexBuffer->s_Vertices.PushBack({ {0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 1.0f} });
+	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f} });
 
 	outIndexBuffer->s_Indices.PushBack(0);
 	outIndexBuffer->s_Indices.PushBack(1);

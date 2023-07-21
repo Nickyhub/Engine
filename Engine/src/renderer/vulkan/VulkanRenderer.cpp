@@ -47,7 +47,6 @@ bool VulkanRenderer::Initialize() {
 	}
 
 	// Create Framebuffers
-	//Pointer for convenience
 	m_VulkanData.s_Swapchain.s_Framebuffers.Resize(VulkanRenderer::m_VulkanData.s_Swapchain.s_ImageCount);
 	for (unsigned int i = 0; i < VulkanRenderer::m_VulkanData.s_Swapchain.s_ImageCount; i++) {
 		if (!VulkanFramebufferUtils::Create(&m_VulkanData.s_Swapchain.s_Framebuffers[i], i)) {
@@ -56,10 +55,17 @@ bool VulkanRenderer::Initialize() {
 		}
 	}
 
+	// Create Vulkan image
+	if (!VulkanImageUtils::Create(m_VulkanData.s_VulkanImage)) {
+		EN_ERROR("Failed to create vulkan image.");
+		return false;
+	}
+
 	// Create VertexBuffer Right before the graphics pipeline
 	if (!VulkanBufferUtils::GeneratePlaneData(&m_VulkanData.s_VertexBuffer, &m_VulkanData.s_IndexBuffer, 10, 10, 2, 2) ||
 		!VulkanBufferUtils::CreateVertexBuffer(m_VulkanData.s_VertexBuffer) ||
-		!VulkanBufferUtils::CreateIndexBuffer(m_VulkanData.s_IndexBuffer)) {
+		!VulkanBufferUtils::CreateIndexBuffer(m_VulkanData.s_IndexBuffer) ||
+		!VulkanBufferUtils::CreateUniformBuffer(m_VulkanData.s_UniformBuffer)) {
 		EN_ERROR("Failed to create vertex buffer. Shutting down.");
 		return false;
 	}
@@ -70,8 +76,14 @@ bool VulkanRenderer::Initialize() {
 		return false;
 	}
 
-	m_VulkanData.s_CommandBuffers.Resize(m_VulkanData.s_FramesInFlight);
+	// Create descriptor pool and sets
+	if (!VulkanPipelineUtils::CreateDescriptorPool() ||
+		!VulkanPipelineUtils::CreateDescriptorSets()) {
+		EN_ERROR("Failed to create descriptor pool or sets.");
+		return false;
+	}
 
+	m_VulkanData.s_CommandBuffers.Resize(m_VulkanData.s_FramesInFlight);
 	// Create Command buffers
 	for (unsigned int i = 0; i < m_VulkanData.s_FramesInFlight; i++) {
 		if (!VulkanCommandbufferUtils::Create(&m_VulkanData.s_CommandBuffers[i])) {
@@ -116,6 +128,9 @@ bool VulkanRenderer::BeginFrame(VulkanData* data) {
 }
 
 bool VulkanRenderer::DrawFrame(VulkanData* data) {
+	// Maybe this does belong somewhere else
+	VulkanBufferUtils::UpdateUniformBuffer(data->s_UniformBuffer);
+
 	VulkanRenderpassUtils::Begin(&data->s_Pipeline.s_Renderpass, data->s_Swapchain.s_CurrentSwapchainImageIndex, &data->s_CommandBuffers[data->s_CurrentFrame]);
 
 	VkViewport viewport{};
@@ -139,8 +154,16 @@ bool VulkanRenderer::DrawFrame(VulkanData* data) {
 	vkCmdBindVertexBuffers(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, 0, 1, vertexBuffers, offsets);
 	vkCmdBindIndexBuffer(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, data->s_IndexBuffer.s_Handle, 0, VK_INDEX_TYPE_UINT32);
 
+	vkCmdBindDescriptorSets(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle,
+		VK_PIPELINE_BIND_POINT_GRAPHICS,
+		data->s_Pipeline.s_Layout,
+		0,
+		1,
+		&data->s_DescriptorSets[data->s_CurrentFrame],
+		0,
+		nullptr);
 	vkCmdDrawIndexed(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, static_cast<uint32_t>(data->s_IndexBuffer.s_Indices.Size()), 1, 0, 0, 0);
-	//vkCmdDraw(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, static_cast<uint32_t>(m_VulkanData.s_VertexBuffer.s_Vertices.Size()), 1, 0, 0);
+
 	return true;
 }
 
@@ -199,6 +222,16 @@ void VulkanRenderer::Shutdown() {
 	VulkanBufferUtils::Destroy(&m_VulkanData.s_IndexBuffer);
 	VulkanBufferUtils::Destroy(&m_VulkanData.s_VertexBuffer);
 
+	// Destroy uniform buffers
+	for (unsigned int i = 0; i < m_VulkanData.s_FramesInFlight; i++) {
+		vkDestroyBuffer(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_UniformBuffer.s_UniformBuffers[i], m_VulkanData.s_Allocator);
+		vkFreeMemory(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_UniformBuffer.s_UniformBuffersMemory[i], m_VulkanData.s_Allocator);
+	}
+
+	vkDestroyDescriptorPool(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_DescriptorPool, nullptr);
+	vkDestroyDescriptorSetLayout(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_Pipeline.s_DescriptorSetLayout, m_VulkanData.s_Allocator);
+
+
 	// Destroy sync objects
 	for (unsigned int i = 0; i < m_VulkanData.s_FramesInFlight; i++) {
 		VulkanSyncObjects::DestroyVkSemaphore(&m_VulkanData.s_RenderFinishedSemaphores[i]);
@@ -206,9 +239,14 @@ void VulkanRenderer::Shutdown() {
 		VulkanSyncObjects::DestroyVkFence(&m_VulkanData.s_InFlightFences[i]);
 	}
 
+	vkDestroyDescriptorSetLayout(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_Pipeline.s_DescriptorSetLayout, m_VulkanData.s_Allocator);
+
 	VulkanPipelineUtils::Destroy(&m_VulkanData.s_Pipeline);
 	VulkanRenderpassUtils::Destroy(&m_VulkanData.s_Pipeline.s_Renderpass);
 	VulkanSwapchainUtils::Destroy(&m_VulkanData.s_Swapchain);
+
+	VulkanImageUtils::Destroy(m_VulkanData.s_VulkanImage);
+
 	VulkanDeviceUtils::Destroy(&m_VulkanData.s_Device);
 
 	// Destroy debug utils messenger

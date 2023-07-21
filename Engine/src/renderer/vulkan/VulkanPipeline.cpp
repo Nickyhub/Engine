@@ -4,8 +4,13 @@
 
 #include "core/File.hpp"
 #include "containers/DArray.hpp"
+#include "containers/Array.hpp"
 
 bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
+	// First create descriptor set layout
+	CreateDescriptorSetLayout(*outPipeline);
+
+
 	// Read in Shader code
 	// TODO maybe shaderconfig file and make this less hardcoded
 	File vertexShader, fragmentShader;
@@ -13,8 +18,10 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	vertexShader.Open("assets/shaders/MaterialShader.vert.spv", FILE_MODE_READ, true);
 	fragmentShader.Open("assets/shaders/MaterialShader.frag.spv", FILE_MODE_READ, true);
 
-	DArray<char> vertexShaderSource(vertexShader.Size());
-	DArray<char> fragmentShaderSource(fragmentShader.Size());
+	DArray<char> vertexShaderSource;
+	vertexShaderSource.Resize(vertexShader.Size());
+	DArray<char> fragmentShaderSource;
+	fragmentShaderSource.Resize(fragmentShader.Size());
 
 	vertexShader.ReadAllBytes(vertexShaderSource.GetData());
 	fragmentShader.ReadAllBytes(fragmentShaderSource.GetData());
@@ -69,7 +76,7 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	// TODO not hardcode this dude
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.vertexAttributeDescriptionCount = 2;
+	vertexInputInfo.vertexAttributeDescriptionCount = VulkanRenderer::m_VulkanData.s_VertexBuffer.s_AttributeDescriptions.Size();
 	vertexInputInfo.pVertexBindingDescriptions = &VulkanRenderer::m_VulkanData.s_VertexBuffer.s_BindingDescription;
 	vertexInputInfo.pVertexAttributeDescriptions = &VulkanRenderer::m_VulkanData.s_VertexBuffer.s_AttributeDescriptions[0];
 
@@ -106,7 +113,7 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	// Maybe support wireframe rendering?
 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL /*VK_POLYGON_MODE_LINE*/;
 	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.depthBiasConstantFactor = 0.0f;
 	rasterizer.depthBiasClamp = 0.0f;
@@ -149,8 +156,8 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	// Pipeline layout
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 0; // Optional
-	pipelineLayoutInfo.pSetLayouts = nullptr; // Optional
+	pipelineLayoutInfo.setLayoutCount = 1;
+	pipelineLayoutInfo.pSetLayouts = &outPipeline->s_DescriptorSetLayout;
 	pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
 	pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 	VK_CHECK(vkCreatePipelineLayout(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, &pipelineLayoutInfo, VulkanRenderer::m_VulkanData.s_Allocator, &outPipeline->s_Layout));
@@ -176,7 +183,12 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	pipelineInfo.subpass = 0;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-	VK_CHECK(vkCreateGraphicsPipelines(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, VulkanRenderer::m_VulkanData.s_Allocator, &outPipeline->s_Handle));
+	VK_CHECK(vkCreateGraphicsPipelines(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice,
+										VK_NULL_HANDLE,
+										1,
+										&pipelineInfo,
+										VulkanRenderer::m_VulkanData.s_Allocator,
+										&outPipeline->s_Handle));
 	EN_DEBUG("Graphics pipeline created.");
 
 	// Destroy shader modules as soon as pipeline creation is finishes
@@ -193,5 +205,111 @@ void VulkanPipelineUtils::Bind(VulkanPipeline* pipeline, VulkanCommandbuffer* co
 void VulkanPipelineUtils::Destroy(VulkanPipeline* pipeline) {
 	vkDestroyPipeline(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, pipeline->s_Handle, VulkanRenderer::m_VulkanData.s_Allocator);
 	vkDestroyPipelineLayout(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, pipeline->s_Layout, VulkanRenderer::m_VulkanData.s_Allocator);
+}
+
+bool VulkanPipelineUtils::CreateDescriptorPool() {
+	VulkanData* d = &VulkanRenderer::m_VulkanData;
+
+	DArray<VkDescriptorPoolSize> poolSizes;
+	poolSizes.Resize(2);
+
+	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolSizes[0].descriptorCount = static_cast<uint32_t>(d->s_FramesInFlight);
+	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	poolSizes[1].descriptorCount = static_cast<uint32_t>(d->s_FramesInFlight);
+
+	VkDescriptorPoolCreateInfo poolInfo{};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = 2;
+	poolInfo.pPoolSizes = poolSizes.GetData();
+	poolInfo.maxSets = static_cast<uint32_t>(d->s_FramesInFlight);
+
+	VK_CHECK(vkCreateDescriptorPool(d->s_Device.s_LogicalDevice, &poolInfo, d->s_Allocator, &d->s_DescriptorPool));
+	return true;
+}
+
+bool VulkanPipelineUtils::CreateDescriptorSets() {
+	VulkanData* d = &VulkanRenderer::m_VulkanData;
+
+	// This surely breaks something I guess
+	DArray<VkDescriptorSetLayout> layouts;
+	for (unsigned int i = 0; i < d->s_FramesInFlight; i++) {
+		layouts.PushBack(d->s_Pipeline.s_DescriptorSetLayout);
+	}
+
+	VkDescriptorSetAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.descriptorPool = d->s_DescriptorPool;
+	allocInfo.descriptorSetCount = static_cast<uint32_t>(d->s_FramesInFlight);
+	allocInfo.pSetLayouts = layouts.GetData();
+
+	d->s_DescriptorSets.Resize(d->s_FramesInFlight);
+	VK_CHECK(vkAllocateDescriptorSets(d->s_Device.s_LogicalDevice, &allocInfo, d->s_DescriptorSets.GetData()));
+
+	for (unsigned int i = 0; i < d->s_FramesInFlight; i++) {
+		VkDescriptorBufferInfo bufferInfo{};
+		bufferInfo.buffer = d->s_UniformBuffer.s_UniformBuffers[i];
+		bufferInfo.offset = 0;
+		bufferInfo.range = sizeof(UniformBufferObject);
+
+		VkDescriptorImageInfo imageInfo{};
+		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		imageInfo.imageView = d->s_VulkanImage.s_View;
+		imageInfo.sampler = d->s_VulkanImage.s_Sampler;
+
+		DArray<VkWriteDescriptorSet> descriptorWrites;
+		descriptorWrites.Resize(2);
+
+		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrites[0].dstSet = d->s_DescriptorSets[i];
+		descriptorWrites[0].dstBinding = 0;
+		descriptorWrites[0].dstArrayElement = 0;
+		descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrites[0].descriptorCount = 1;
+		descriptorWrites[0].pBufferInfo = &bufferInfo;
+
+		descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrites[1].dstSet = d->s_DescriptorSets[i];
+		descriptorWrites[1].dstBinding = 1;
+		descriptorWrites[1].dstArrayElement = 0;
+		descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		descriptorWrites[1].descriptorCount = 1;
+		descriptorWrites[1].pImageInfo = &imageInfo;
+
+		vkUpdateDescriptorSets(d->s_Device.s_LogicalDevice, static_cast<uint32_t>(descriptorWrites.Size()), descriptorWrites.GetData(), 0, nullptr);
+	}
+
+	return true;
+}
+
+bool VulkanPipelineUtils::CreateDescriptorSetLayout(VulkanPipeline& pipeline) {
+	VkDescriptorSetLayoutBinding uboLayoutBinding{};
+	uboLayoutBinding.binding = 0;
+	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboLayoutBinding.descriptorCount = 1;
+	uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	uboLayoutBinding.pImmutableSamplers = nullptr; // Optional
+
+	VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+	samplerLayoutBinding.binding = 1;
+	samplerLayoutBinding.descriptorCount = 1;
+	samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	samplerLayoutBinding.pImmutableSamplers = nullptr;
+	samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	Array<VkDescriptorSetLayoutBinding, 2> layoutBindings;
+	layoutBindings[0] = uboLayoutBinding;
+	layoutBindings[1] = samplerLayoutBinding;
+
+	VkDescriptorSetLayoutCreateInfo layoutInfo{};
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = (unsigned int) layoutBindings.Size();
+	layoutInfo.pBindings = layoutBindings.Data();
+
+	VK_CHECK(vkCreateDescriptorSetLayout(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice,
+										&layoutInfo,
+										nullptr,
+										&pipeline.s_DescriptorSetLayout));
+	return true;
 }
 

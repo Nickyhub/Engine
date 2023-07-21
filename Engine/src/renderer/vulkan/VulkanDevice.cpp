@@ -28,7 +28,7 @@ bool VulkanDeviceUtils::Create(VulkanDevice* device) {
 	}
 
 	// Create and fill queue create infos
-	DArray<VkDeviceQueueCreateInfo> queueCreateInfos(uniqueFamilyIndices.Size());
+	DArray<VkDeviceQueueCreateInfo> queueCreateInfos;
 	for (unsigned int i = 0; i < uniqueFamilyIndices.Size(); i++) {
 		if (uniqueFamilyIndices[i] != -1) {
 			VkDeviceQueueCreateInfo queueCreateInfo{};
@@ -91,7 +91,8 @@ VkPhysicalDevice VulkanDeviceUtils::SelectPhysicalDevice() {
 	unsigned int deviceCount = 0;
 	vkEnumeratePhysicalDevices(VulkanRenderer::m_VulkanData.s_Instance, &deviceCount, nullptr);
 
-	DArray<VkPhysicalDevice> physicalDevices(deviceCount);
+	DArray<VkPhysicalDevice> physicalDevices;
+	physicalDevices.Resize(deviceCount);
 	VkPhysicalDeviceProperties properties;
 
 	// Fill out requirements for the Device and choose it based on them
@@ -123,7 +124,7 @@ VkPhysicalDevice VulkanDeviceUtils::SelectPhysicalDevice() {
 
 
 	// Multiple devices are present. Choose the most suitable
-	DArray<unsigned int> physicalDeviceScores(deviceCount);
+	DArray<unsigned int> physicalDeviceScores;
 	physicalDeviceScores.Fill(0);
 
 	// Give every device a score
@@ -174,7 +175,8 @@ bool VulkanDeviceUtils::PhysicalDeviceMeetsRequirements(const VkPhysicalDevice* 
 	unsigned int queueFamilyCount = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(*device, &queueFamilyCount, nullptr);
 
-	DArray<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+	DArray<VkQueueFamilyProperties> queueFamilies;
+	queueFamilies.Resize(queueFamilyCount);
 	vkGetPhysicalDeviceQueueFamilyProperties(*device, &queueFamilyCount, queueFamilies.GetData());
 
 	int minTransferScore = 255;

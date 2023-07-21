@@ -48,7 +48,7 @@ bool VulkanRenderpassUtils::Create(VulkanRenderpass* outRenderpass) {
 
 bool VulkanRenderpassUtils::Begin(VulkanRenderpass* renderpass, unsigned int imageIndex, VulkanCommandbuffer* commandBuffer) {
 	VulkanSwapchain* swapchain = &VulkanRenderer::m_VulkanData.s_Swapchain;
-	if (imageIndex <= swapchain->s_Framebuffers.Capacity()) {
+	if (imageIndex <= swapchain->s_Framebuffers.Size()) {
 		VkRenderPassBeginInfo renderpassInfo{};
 		renderpassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		renderpassInfo.renderPass = renderpass->s_Handle;

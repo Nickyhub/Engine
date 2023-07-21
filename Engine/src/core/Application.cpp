@@ -30,12 +30,12 @@ bool Application::Initialize(ApplicationConfig* config) {
 	pConfig.Name = config->Name;
 
 	if (!EventSystem::Initialize()) {
-		EN_ERROR("Cannot initialize event system. Shutting down.");
+		EN_FATAL("Cannot initialize event system. Shutting down.");
 		return false;
 	}
 
 	if (!Platform::Initialize(pConfig)) {
-		EN_ERROR("Platform initialize failed. Shutting down.");
+		EN_FATAL("Platform initialize failed. Shutting down.");
 		return false;
 	}
 
@@ -43,7 +43,10 @@ bool Application::Initialize(ApplicationConfig* config) {
 	Logger::Initialize(LOG_LEVEL_TRACE);
 
 	// Initialize Renderer
-	VulkanRenderer::Initialize();
+	if (!VulkanRenderer::Initialize()) {
+		EN_FATAL("Failed to Vulkan Renderer. Shutting down.");
+		return false;
+	}
 	 
 	// Register on event functions
 	EventSystem::RegisterEvent(nullptr, OnClose, EVENT_TYPE_WINDOW_CLOSE);

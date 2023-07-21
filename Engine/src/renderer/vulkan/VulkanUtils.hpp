@@ -9,6 +9,7 @@
 #include "VulkanRenderpass.hpp"
 #include "VulkanFramebuffer.hpp"
 #include "VulkanBuffer.hpp"
+#include "VulkanImage.hpp"
 
 #define VK_CHECK(expression)								\
 	if(expression != VK_SUCCESS) {							\
@@ -34,9 +35,14 @@ struct VulkanData {
 	unsigned int s_FramebufferHeight = 0;
 	unsigned int s_FramebufferWidth = 0;
 
-	VertexBuffer s_VertexBuffer;
-	IndexBuffer s_IndexBuffer;
+	// This stuff shut be generalized and lie in generic renderbuffers I suppose
+	VulkanImage s_VulkanImage{};
+	VertexBuffer s_VertexBuffer{};
+	IndexBuffer s_IndexBuffer{};
+	UniformBuffer s_UniformBuffer{};
 
+	VkDescriptorPool s_DescriptorPool{};
+	DArray<VkDescriptorSet> s_DescriptorSets{};
 
 	DArray<VulkanCommandbuffer> s_CommandBuffers{};
 

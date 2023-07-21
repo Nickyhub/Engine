@@ -14,6 +14,8 @@ struct VulkanCommandbuffer {
 class VulkanCommandbufferUtils {
 public:
 	static bool Create(VulkanCommandbuffer* outCommandbuffer);
+	static VkCommandBuffer BeginSingleUseCommands();
+	static void EndSingleUseCommands(VkCommandBuffer commandBuffer);
 	static bool Record(VulkanCommandbuffer* outCommandbuffer, unsigned int imageIndex);
 	static bool End(VulkanCommandbuffer* commandBuffer);
 	// No Destroy() because Vulkan frees the buffers automatically when destroying the command pool

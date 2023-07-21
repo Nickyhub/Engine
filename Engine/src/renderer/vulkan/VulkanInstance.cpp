@@ -55,7 +55,8 @@ bool VulkanInstance::Create(VkInstance* outInstance) {
 	// Available extensions
 	unsigned int extensionCount = 0;
 	vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-	DArray<VkExtensionProperties> availableExtensions(extensionCount);
+	DArray<VkExtensionProperties> availableExtensions;
+	availableExtensions.Resize(extensionCount);
 	vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, availableExtensions.GetData());
 	
 	EN_INFO("Available extensions:");

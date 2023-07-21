@@ -54,7 +54,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>src;E:\Dev\Projekte\_Libraries\Vulkan\Include;E:\Dev\Projekte\_Libraries\GLM\</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>src;E:\Dev\Projekte\_Libraries\Vulkan\Include;E:\Dev\Projekte\_Libraries\GLM\;vendor</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -107,6 +107,7 @@
     <ClCompile Include="src\renderer\vulkan\VulkanSwapchain.cpp" />
     <ClCompile Include="src\renderer\vulkan\VulkanSyncObjects.cpp" />
     <ClCompile Include="src\renderer\vulkan\VulkanUtils.cpp" />
+    <ClCompile Include="src\renderer\vulkan\VulkanImage.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\containers\Array.hpp" />
@@ -122,10 +123,12 @@
     <ClInclude Include="src\core\Random.hpp" />
     <ClInclude Include="src\core\String.hpp" />
     <ClInclude Include="src\Defines.hpp" />
+    <ClInclude Include="src\renderer\UniformBufferObject.hpp" />
     <ClInclude Include="src\renderer\vulkan\VulkanBuffer.hpp" />
     <ClInclude Include="src\renderer\vulkan\VulkanCommandbuffer.hpp" />
     <ClInclude Include="src\renderer\vulkan\VulkanDevice.hpp" />
     <ClInclude Include="src\renderer\vulkan\VulkanFramebuffer.hpp" />
+    <ClInclude Include="src\renderer\vulkan\VulkanImage.hpp" />
     <ClInclude Include="src\renderer\vulkan\VulkanInstance.hpp" />
     <ClInclude Include="src\renderer\vulkan\VulkanPipeline.hpp" />
     <ClInclude Include="src\renderer\vulkan\VulkanRenderer.hpp" />
@@ -133,6 +136,7 @@
     <ClInclude Include="src\renderer\vulkan\VulkanSwapchain.hpp" />
     <ClInclude Include="src\renderer\vulkan\VulkanSyncObjects.hpp" />
     <ClInclude Include="src\renderer\vulkan\VulkanUtils.hpp" />
+    <ClInclude Include="vendor\stb_image.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="assets\shaders\MaterialShader.frag.glsl" />
