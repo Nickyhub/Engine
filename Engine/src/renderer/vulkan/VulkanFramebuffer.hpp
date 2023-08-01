@@ -2,7 +2,7 @@
 #include <vulkan/vulkan.h>
 
 struct VulkanFramebuffer {
-	VkFramebuffer s_Handle = nullptr;
+	VkFramebuffer s_Handle;
 };
 
 class VulkanFramebufferUtils {

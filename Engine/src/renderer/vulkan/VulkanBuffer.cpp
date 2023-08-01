@@ -1,5 +1,6 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -246,12 +247,24 @@ bool VulkanBufferUtils::GeneratePlaneData(VertexBuffer* outVertexBuffer, IndexBu
 	outVertexBuffer->s_Vertices.PushBack({ {0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 1.0f} });
 	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f} });
 
+	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, -0.5f, 1.0f}, { 1.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 0.0f} });
+	outVertexBuffer->s_Vertices.PushBack({ {0.5f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} });
+	outVertexBuffer->s_Vertices.PushBack({ {0.5f, 0.5f, 1.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 1.0f} });
+	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, 0.5f, 1.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f} });
+
 	outIndexBuffer->s_Indices.PushBack(0);
 	outIndexBuffer->s_Indices.PushBack(1);
 	outIndexBuffer->s_Indices.PushBack(2);
 	outIndexBuffer->s_Indices.PushBack(2);
 	outIndexBuffer->s_Indices.PushBack(3);
 	outIndexBuffer->s_Indices.PushBack(0);
+
+	outIndexBuffer->s_Indices.PushBack(4);
+	outIndexBuffer->s_Indices.PushBack(5);
+	outIndexBuffer->s_Indices.PushBack(6);
+	outIndexBuffer->s_Indices.PushBack(6);
+	outIndexBuffer->s_Indices.PushBack(7);
+	outIndexBuffer->s_Indices.PushBack(4);
 
 	return true;
 }

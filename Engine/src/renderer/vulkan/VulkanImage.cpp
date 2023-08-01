@@ -9,6 +9,10 @@
 #include "VulkanRenderer.hpp"
 #include "core/Logger.hpp"
 
+/**
+ * Creates a VkImage with staging buffer. Transitions the Layout and automatically creates VkImageView as well as the texture sampler
+ * TODO this should all be a little more seperated and handled by a texture system
+ */
 bool VulkanImageUtils::Create(VulkanImage& outImage) {
 	VulkanData* d = &VulkanRenderer::m_VulkanData;
 
@@ -57,12 +61,12 @@ bool VulkanImageUtils::Create(VulkanImage& outImage) {
 	// Transition the layout again for the shader
 	TransitionImageLayout(outImage.s_Handle, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-	if (!CreateImageView(outImage)) {
+	if (!CreateImageView(outImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT)) {
 		EN_ERROR("Failed to create Image view.");
 		return false;
 	}
 
-	if (!CreateTextureSampler(outImage)) {
+	if (!CreateTextureSampler(VulkanRenderer::m_VulkanData.s_Sampler)) {
 		EN_ERROR("Failed to create texture image sampler.");
 		return false;
 	}
@@ -117,13 +121,13 @@ bool VulkanImageUtils::CreateImage(uint32_t width,
 	return true;
 }
 
-bool VulkanImageUtils::CreateImageView(VulkanImage& outImage) {
+bool VulkanImageUtils::CreateImageView(VulkanImage& outImage, VkFormat format, VkImageAspectFlags aspectFlags) {
 	VkImageViewCreateInfo viewInfo{};
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewInfo.image = outImage.s_Handle;
 	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-	viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	viewInfo.format = format;
+	viewInfo.subresourceRange.aspectMask = aspectFlags;
 	viewInfo.subresourceRange.baseMipLevel = 0;
 	viewInfo.subresourceRange.levelCount = 1;
 	viewInfo.subresourceRange.baseArrayLayer = 0;
@@ -136,7 +140,7 @@ bool VulkanImageUtils::CreateImageView(VulkanImage& outImage) {
 	return true;
 }
 
-bool VulkanImageUtils::CreateTextureSampler(VulkanImage& outImage) {
+bool VulkanImageUtils::CreateTextureSampler(VkSampler& outSampler) {
 	VkSamplerCreateInfo samplerInfo{};
 	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 	samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -162,8 +166,63 @@ bool VulkanImageUtils::CreateTextureSampler(VulkanImage& outImage) {
 	VK_CHECK(vkCreateSampler(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice,
 							 &samplerInfo,
 							 VulkanRenderer::m_VulkanData.s_Allocator,
-							 &outImage.s_Sampler));
+							 &outSampler));
 	return true;
+}
+
+bool VulkanImageUtils::CreateDepthResources(VulkanImage& depthImage) {
+	VulkanData* d = &VulkanRenderer::m_VulkanData;
+	VkFormat depthFormat = FindDepthFormat();
+
+	// Create VkImage
+	if (!CreateImage(d->s_Swapchain.s_Width,
+		d->s_Swapchain.s_Height,
+		depthFormat,
+		VK_IMAGE_TILING_OPTIMAL,
+		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		depthImage.s_Handle,
+		depthImage.s_Memory)) {
+		EN_ERROR("Failed to create VkImage for depth image.");
+		return false;
+	}
+
+	// Set the correct height and width of the image
+	depthImage.s_Height = d->s_Swapchain.s_Height;
+	depthImage.s_Width = d->s_Swapchain.s_Width;
+
+	// Create VkImageView
+	CreateImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+	TransitionImageLayout(depthImage.s_Handle, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+	return true;
+}
+
+VkFormat VulkanImageUtils::FindSupportedFormat(DArray<VkFormat> candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
+	for (unsigned int i = 0; i < candidates.Size(); i++) {
+		VkFormatProperties props;
+		vkGetPhysicalDeviceFormatProperties(VulkanRenderer::m_VulkanData.s_Device.s_PhysicalDevice, candidates[i], &props);
+		if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
+			return candidates[i];
+		}
+		else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
+			return candidates[i];
+		}
+	}
+	EN_WARN("Failed to find supported image format for depth image. NULL is returned.");
+	return {};
+}
+
+VkFormat VulkanImageUtils::FindDepthFormat() {
+	DArray<VkFormat> candidates;
+	candidates.PushBack(VK_FORMAT_D32_SFLOAT);
+	candidates.PushBack(VK_FORMAT_D32_SFLOAT_S8_UINT);
+	candidates.PushBack(VK_FORMAT_D24_UNORM_S8_UINT);
+	return FindSupportedFormat(
+		candidates,
+		VK_IMAGE_TILING_OPTIMAL,
+		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+	);
 }
 
 void VulkanImageUtils::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
@@ -199,8 +258,24 @@ void VulkanImageUtils::TransitionImageLayout(VkImage image, VkFormat format, VkI
 		sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 	}
+	else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+
+		if (HasStencilComponent(format)) {
+			barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+		}
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	}
 	else {
 		EN_ERROR("Unsupported layout transition in VulkanImageUtils::TransitionImageLayout.");
+	}
+
+	if (newLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	}
 
 	vkCmdPipelineBarrier(
@@ -250,7 +325,6 @@ void VulkanImageUtils::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_
 void VulkanImageUtils::Destroy(VulkanImage& image) {
 	VulkanData* d = &VulkanRenderer::m_VulkanData;
 
-	vkDestroySampler(d->s_Device.s_LogicalDevice, image.s_Sampler, d->s_Allocator);
 	vkDestroyImageView(d->s_Device.s_LogicalDevice, image.s_View,d->s_Allocator);
 	vkDestroyImage(d->s_Device.s_LogicalDevice, image.s_Handle, d->s_Allocator);
 	vkFreeMemory(d->s_Device.s_LogicalDevice, image.s_Memory, d->s_Allocator);

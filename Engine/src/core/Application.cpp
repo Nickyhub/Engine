@@ -78,7 +78,7 @@ void Application::Run() {
 		VulkanRenderer::EndFrame(&VulkanRenderer::m_VulkanData);
 
 		if (m_Clock.GetElapsed() >= 1.0) {
-			EN_DEBUG("Frames per second: %u", frameCount * 2);
+			EN_DEBUG("Frames per second: %u", frameCount);
 			m_Clock.Start();
 			frameCount = 0;
 		}

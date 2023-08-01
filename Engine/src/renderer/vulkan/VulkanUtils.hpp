@@ -14,7 +14,7 @@
 #define VK_CHECK(expression)								\
 	if(expression != VK_SUCCESS) {							\
 		EN_ERROR("Error executing %s", ##expression);		\
-		return false;										\
+		__debugbreak();										\
 	}
 
 struct VulkanData {
@@ -37,6 +37,9 @@ struct VulkanData {
 
 	// This stuff shut be generalized and lie in generic renderbuffers I suppose
 	VulkanImage s_VulkanImage{};
+	VkSampler s_Sampler;
+	VulkanImage s_DepthImage{};
+
 	VertexBuffer s_VertexBuffer{};
 	IndexBuffer s_IndexBuffer{};
 	UniformBuffer s_UniformBuffer{};

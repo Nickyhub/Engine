@@ -1,13 +1,23 @@
 #pragma once
 
+#include <vector>
+
 #include "vulkan/vulkan.h"
+
+struct VulkanInstanceConfig {
+	std::vector<const char*> extensions;
+	std::vector<const char*> validationLayers;
+
+	void populateWithDefaultValues();
+};
 
 class VulkanInstance {
 public:
 	VulkanInstance() = delete;
-	static bool Create(VkInstance* outInstance);
-	static void Destroy(VkInstance* instance);
-
+	VulkanInstance(VulkanInstanceConfig& instanceConfig);
+	~VulkanInstance();
 private:
-	static bool CreateDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debugMessenger);
+	bool createDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debugMessenger);
+private:
+	VkInstance m_Handle;
 };

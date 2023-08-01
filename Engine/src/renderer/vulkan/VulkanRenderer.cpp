@@ -17,7 +17,9 @@ bool VulkanRenderer::Initialize() {
 	EN_DEBUG("Intializing Vulkan Renderer...");
 
 	// Create vulkan objects in certain order
-	if (!VulkanInstance::Create(&m_VulkanData.s_Instance)) {
+	VulkanInstanceConfig instanceConfig;
+	instanceConfig.populateWithDefaultValues();
+	if (m_VulkanData.s_Instance) {
 		EN_ERROR("Renderer failed to create Vulkan Instance. Shutting down.");
 		return false;
 	}
@@ -53,6 +55,12 @@ bool VulkanRenderer::Initialize() {
 			EN_ERROR("Failed to create framebuffer for image index %d.", i);
 			return false;
 		}
+	}
+
+	// Create depth image
+	if (!VulkanImageUtils::Create(m_VulkanData.s_DepthImage)) {
+		EN_ERROR("Failed to create depth image. Shutting down.");
+		return false;
 	}
 
 	// Create Vulkan image
@@ -244,6 +252,8 @@ void VulkanRenderer::Shutdown() {
 	VulkanPipelineUtils::Destroy(&m_VulkanData.s_Pipeline);
 	VulkanRenderpassUtils::Destroy(&m_VulkanData.s_Pipeline.s_Renderpass);
 	VulkanSwapchainUtils::Destroy(&m_VulkanData.s_Swapchain);
+
+	vkDestroySampler(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_Sampler, m_VulkanData.s_Allocator);
 
 	VulkanImageUtils::Destroy(m_VulkanData.s_VulkanImage);
 

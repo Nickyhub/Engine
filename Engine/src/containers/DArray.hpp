@@ -12,10 +12,10 @@ template <typename T>
 class DArray {
 public:
 	DArray() {
-		/*m_Data = (T*)Memory::Allocate(2 * sizeof(T), MEMORY_TAG_DARRAY);
-		Memory::ZeroOut(m_Data, 2 * sizeof(T));
-		m_Capacity = 2;
-		m_Size = 0;*/
+	//	/*m_Data = (T*)Memory::Allocate(2 * sizeof(T), MEMORY_TAG_DARRAY);
+	//	Memory::ZeroOut(m_Data, 2 * sizeof(T));
+	//	m_Capacity = 2;
+	//	m_Size = 0;*/
 	}
 
 	~DArray() {

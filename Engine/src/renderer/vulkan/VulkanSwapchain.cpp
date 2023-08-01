@@ -94,6 +94,7 @@ bool VulkanSwapchainUtils::Create(VulkanSwapchain* outSwapchain, unsigned int wi
 	outSwapchain->s_ImageViewCount = imageCount;
 
 	for (unsigned int i = 0; i < imageCount; i++) {
+		// TODO call VulkanImageUtils::CreateImageView. Somehow this should be cleaned up anyway then.
 		VkImageViewCreateInfo createInfo{};
 		createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		createInfo.image = outSwapchain->s_Images[i];

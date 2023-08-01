@@ -29,9 +29,16 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 	return VK_FALSE;
 }
 
+void VulkanInstanceConfig::populateWithDefaultValues() {
+	extensions.emplace_back(Platform::GetVulkanExtensions());
+	extensions.emplace_back(VK_KHR_SURFACE_EXTENSION_NAME);
+	extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
-bool VulkanInstance::Create(VkInstance* outInstance) {
-	// Get Application data
+	validationLayers.emplace_back("VK_LAYER_KHRONOS_validation");
+}
+
+VulkanInstance::VulkanInstance(VulkanInstanceConfig& instanceConfig) {
+// Get Application data
 	ApplicationConfig aConfig = Application::GetConfig();
 	VkApplicationInfo appInfo{};
 	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -45,12 +52,6 @@ bool VulkanInstance::Create(VkInstance* outInstance) {
 	VkInstanceCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	createInfo.pApplicationInfo = &appInfo;
-
-	// Fill array with required extensions
-	DArray<const char*> extensions;
-	extensions.PushBack(Platform::GetVulkanExtensions());
-	extensions.PushBack(VK_KHR_SURFACE_EXTENSION_NAME);
-	extensions.PushBack(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
 	// Available extensions
 	unsigned int extensionCount = 0;
@@ -67,20 +68,16 @@ bool VulkanInstance::Create(VkInstance* outInstance) {
 
 	EN_DEBUG("Required extensions: ");
 	// Output required extension
-	for (unsigned int i = 0; i < extensions.Size(); i++) {
-		EN_DEBUG(extensions[i]);
+	for (unsigned int i = 0; i < instanceConfig.extensions.size(); i++) {
+		EN_DEBUG(instanceConfig.extensions[i]);
 	}
 
-	createInfo.enabledExtensionCount = extensions.Size();
-	createInfo.ppEnabledExtensionNames = &extensions[0];
+	createInfo.enabledExtensionCount = instanceConfig.extensions.size();
+	createInfo.ppEnabledExtensionNames = &instanceConfig.extensions[0];
 	createInfo.enabledLayerCount = 0;
 
 // Enable validation layer support in debug mode
 #ifdef _DEBUG
-	// Create required validation layers
-	DArray<const char*> requiredValidationLayers;
-	requiredValidationLayers.PushBack("VK_LAYER_KHRONOS_validation");
-
 	// Get available validation layers
 	DArray<VkLayerProperties> availableValidationLayers;
 	unsigned int validationLayerCount;
@@ -91,8 +88,8 @@ bool VulkanInstance::Create(VkInstance* outInstance) {
 	// Check if the required layers are available
 	bool found = false;
 	for (unsigned int i = 0; i < validationLayerCount; i++) {
-		for (unsigned int j = 0; j < requiredValidationLayers.Size(); j++) {
-			if (String::StringCompare(availableValidationLayers[i].layerName, requiredValidationLayers[j])) {
+		for (unsigned int j = 0; j < instanceConfig.validationLayers.size(); j++) {
+			if (String::StringCompare(availableValidationLayers[i].layerName, instanceConfig.validationLayers[j])) {
 				found = true;
 			}
 		}
@@ -100,32 +97,27 @@ bool VulkanInstance::Create(VkInstance* outInstance) {
 
 	// If all have been found add them to the vkInstanceCreateInfo
 	if (found) {
-		createInfo.enabledLayerCount = requiredValidationLayers.Size();
-		createInfo.ppEnabledLayerNames = requiredValidationLayers.GetData();
+		createInfo.enabledLayerCount = instanceConfig.validationLayers.size();
+		createInfo.ppEnabledLayerNames = instanceConfig.validationLayers.data();
 	}
 
 #endif
-
-	VK_CHECK(vkCreateInstance(&createInfo, VulkanRenderer::m_VulkanData.s_Allocator, outInstance));
-
+	VK_CHECK(vkCreateInstance(&createInfo, VulkanRenderer::m_VulkanData.s_Allocator, &this->m_Handle));
 #ifdef _DEBUG
 	// Can only create Debug Messenger after Instance has already been created
-	CreateDebugMessenger(outInstance, &VulkanRenderer::m_VulkanData.s_DebugMessenger);
+	createDebugMessenger(&this->m_Handle, &VulkanRenderer::m_VulkanData.s_DebugMessenger);
 #endif
-
 	EN_DEBUG("Vulkan instance created!");
-	return true;
 }
 
-void VulkanInstance::Destroy(VkInstance* instance) {
-	EN_DEBUG("Destroying Vulkan Instance.");
-	if (instance) {
-		vkDestroyInstance(*instance, VulkanRenderer::m_VulkanData.s_Allocator);
+VulkanInstance::~VulkanInstance() {
+EN_DEBUG("Destroying Vulkan Instance.");
+	if (this->m_Handle) {
+		vkDestroyInstance(this->m_Handle, VulkanRenderer::m_VulkanData.s_Allocator);
 	}
-
 }
 
-bool VulkanInstance::CreateDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debugMessenger) {
+bool VulkanInstance::createDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debugMessenger) {
 	VkDebugUtilsMessengerCreateInfoEXT createInfo;
 	createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
