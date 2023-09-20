@@ -3,34 +3,47 @@
 #include <vulkan/vulkan.h>
 #include <containers/DArray.hpp>
 
-struct VulkanImage {
-	VkImage s_Handle;
-	VkImageView s_View;
-	VkDeviceMemory s_Memory;
-	int s_Width = 0;
-	int s_Height = 0;
-	int s_Channels = 0;
+struct VulkanImageConfig {
+	unsigned int s_Width;
+	unsigned int s_Height;
+	VkFormat s_Format;
+	VkImageTiling s_Tiling;
+	VkImageUsageFlags s_Usage;
+	VkMemoryPropertyFlags s_Properties;
+
+	const VulkanDevice& s_Device;
+	const VkAllocationCallbacks& s_Allocator;
 };
 
-
-class VulkanImageUtils {
+class VulkanImage {
 public:
-	static bool Create(VulkanImage& outImage);
-	static void Destroy(VulkanImage& image);
-	static VkFormat FindSupportedFormat(DArray<VkFormat> candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
-	static VkFormat FindDepthFormat();
-	static bool HasStencilComponent(VkFormat format) { return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT; }
-	static bool CreateImage(uint32_t width,
-		uint32_t height,
-		VkFormat format,
-		VkImageTiling tiling,
-		VkImageUsageFlags usage,
-		VkMemoryPropertyFlags properties,
-		VkImage& image, VkDeviceMemory& imageMemory);
-	static bool CreateImageView(VulkanImage& outImage, VkFormat format, VkImageAspectFlags aspectFlags);
-	static bool CreateTextureSampler(VkSampler& outSampler);
-	static bool CreateDepthResources(VulkanImage& depthImage);
-	static void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
-	static void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
+	VulkanImage() = delete;
+	VulkanImage(const VulkanImageConfig& config);
+	~VulkanImage();
 private:
+	VkFormat findSupportedFormat(DArray<VkFormat> candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+	bool hasStencilComponent(VkFormat format) { return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT; }
+	bool createImage(const VulkanImageConfig& config, int memoryType);
+	bool createImageView(VkFormat format, VkImageAspectFlags aspectFlags);
+	bool createTextureSampler(VkSampler& outSampler);
+	bool createDepthImage(const VulkanImageConfig& config);
+	void transitionImageLayout(VkImage image,
+							   VkFormat format,
+							   VkImageLayout oldLayout,
+							   VkImageLayout newLayout);
+	void copyBufferToImage(VkBuffer buffer,
+						   uint32_t width,
+						   uint32_t height);
+public:
+	VkSampler m_Sampler;
+	VkImageView m_View;
+private:
+	const VulkanDevice& m_Device;
+	const VkAllocationCallbacks& m_Allocator;
+
+	VkImage m_Handle;
+	VkDeviceMemory m_Memory;
+	int m_Width = 0;
+	int m_Height = 0;
+	int m_Channels = 0;
 };

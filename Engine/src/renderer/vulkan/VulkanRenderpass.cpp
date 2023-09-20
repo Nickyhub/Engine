@@ -1,12 +1,14 @@
 #include "containers/Array.hpp"
 
 #include "VulkanRenderpass.hpp"
-#include "VulkanRenderer.hpp"
 #include "VulkanCommandbuffer.hpp"
+#include "VulkanFramebuffer.hpp"
+#include "VulkanUtils.hpp"
 
-bool VulkanRenderpassUtils::Create(VulkanRenderpass* outRenderpass) {
+VulkanRenderpass::VulkanRenderpass(const VulkanDevice& device, VkFormat colorFormat, const VkAllocationCallbacks& allocator)
+	: m_Device(device), m_Allocator(allocator) {
 	VkAttachmentDescription colorAttachment{};
-	colorAttachment.format = VulkanRenderer::m_VulkanData.s_Swapchain.s_SurfaceFormat.format;
+	colorAttachment.format = colorFormat;
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -20,7 +22,7 @@ bool VulkanRenderpassUtils::Create(VulkanRenderpass* outRenderpass) {
 	colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 	VkAttachmentDescription depthAttachment{};
-	depthAttachment.format = VulkanImageUtils::FindDepthFormat();
+	depthAttachment.format = m_Device.findDepthFormat();
 	depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -61,22 +63,19 @@ bool VulkanRenderpassUtils::Create(VulkanRenderpass* outRenderpass) {
 	renderPassInfo.dependencyCount = 1;
 	renderPassInfo.pDependencies = &dependency;
 
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
-	VK_CHECK(vkCreateRenderPass(d->s_Device.s_LogicalDevice, &renderPassInfo, d->s_Allocator, &d->s_Pipeline.s_Renderpass.s_Handle));
+	VK_CHECK(vkCreateRenderPass(m_Device.m_LogicalDevice, &renderPassInfo, &m_Allocator, &m_Handle));
 
 	EN_DEBUG("Renderpass created.");
-	return true;
 }
 
-bool VulkanRenderpassUtils::Begin(VulkanRenderpass* renderpass, unsigned int imageIndex, VulkanCommandbuffer* commandBuffer) {
-	VulkanSwapchain* swapchain = &VulkanRenderer::m_VulkanData.s_Swapchain;
-	if (imageIndex <= swapchain->s_Framebuffers.Size()) {
+bool VulkanRenderpass::begin(unsigned int imageIndex, VulkanCommandbuffer* commandBuffer, VkExtent2D extent, const DArray<VulkanFramebuffer*>& framebuffers) {
+	if (imageIndex <= framebuffers.Size()) {
 		VkRenderPassBeginInfo renderpassInfo{};
 		renderpassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderpassInfo.renderPass = renderpass->s_Handle;
-		renderpassInfo.framebuffer = swapchain->s_Framebuffers[imageIndex].s_Handle;
+		renderpassInfo.renderPass = m_Handle;
+		renderpassInfo.framebuffer = framebuffers[imageIndex]->m_Handle;
 		renderpassInfo.renderArea.offset = { 0, 0 };
-		renderpassInfo.renderArea.extent = VulkanRenderer::m_VulkanData.s_Swapchain.s_Extent;
+		renderpassInfo.renderArea.extent = extent;
 
 		Array<VkClearValue, 2> clearValues;
 		clearValues[0] = { { 0.0f, 0.1f, 0.1f} };
@@ -85,7 +84,7 @@ bool VulkanRenderpassUtils::Begin(VulkanRenderpass* renderpass, unsigned int ima
 		renderpassInfo.clearValueCount = (uint32_t) clearValues.Size();
 		renderpassInfo.pClearValues = clearValues.Data();
 
-		vkCmdBeginRenderPass(commandBuffer->s_Handle, &renderpassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBeginRenderPass(commandBuffer->m_Handle, &renderpassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		return true;
 	}
 	else {
@@ -94,11 +93,11 @@ bool VulkanRenderpassUtils::Begin(VulkanRenderpass* renderpass, unsigned int ima
 	}
 }
 
-bool VulkanRenderpassUtils::End(VulkanRenderpass* renderpass, unsigned int imageIndex, VulkanCommandbuffer* commandBuffer) {
-	vkCmdEndRenderPass(commandBuffer->s_Handle);
+bool VulkanRenderpass::end(unsigned int imageIndex, VulkanCommandbuffer* commandBuffer) {
+	vkCmdEndRenderPass(commandBuffer->m_Handle);
 	return true;
 }
 
-void VulkanRenderpassUtils::Destroy(VulkanRenderpass* renderpass) {
-	vkDestroyRenderPass(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, renderpass->s_Handle, VulkanRenderer::m_VulkanData.s_Allocator);
+VulkanRenderpass::~VulkanRenderpass() {
+	vkDestroyRenderPass(m_Device.m_LogicalDevice, m_Handle,	&m_Allocator);
 }

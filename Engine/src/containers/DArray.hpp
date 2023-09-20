@@ -101,7 +101,7 @@ public:
 
 	unsigned int Size() const { return (unsigned int) internalVector.size(); }
 	//unsigned int Capacity() const { return m_Capacity; }
-	auto GetData() { return internalVector.data(); }
+	T* GetData() { return internalVector.data(); }
 
 private:
 	//void Realloc(unsigned int newCapacity) {

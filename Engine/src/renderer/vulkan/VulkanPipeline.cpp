@@ -1,15 +1,18 @@
 #include "VulkanPipeline.hpp"
 #include "VulkanUtils.hpp"
-#include "VulkanRenderer.hpp"
+#include "VulkanBuffer.hpp"
+#include "VulkanFramebuffer.hpp"
 
 #include "core/File.hpp"
 #include "containers/DArray.hpp"
 #include "containers/Array.hpp"
 
-bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
+VulkanPipeline::VulkanPipeline(const VulkanPipelineConfig& config)
+	: m_Device(config.s_Device), m_Allocator(config.s_Allocator),
+	m_FramesInFlight(config.s_FramesInFlight),
+	m_Renderpass(m_Device, config.s_RenderpassColorFormat, m_Allocator) {
 	// First create descriptor set layout
-	CreateDescriptorSetLayout(*outPipeline);
-
+	createDescriptorSetLayout();
 
 	// Read in Shader code
 	// TODO maybe shaderconfig file and make this less hardcoded
@@ -38,7 +41,10 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	vertexCreateInfo.codeSize = vertexShader.Size();
 	vertexCreateInfo.pCode = reinterpret_cast<const uint32_t*>(vertexShaderSource.GetData());
 
-	VK_CHECK(vkCreateShaderModule(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, &vertexCreateInfo, VulkanRenderer::m_VulkanData.s_Allocator, &vertexModule));
+	VK_CHECK(vkCreateShaderModule(m_Device.m_LogicalDevice,
+								  &vertexCreateInfo,
+								  &m_Allocator,
+								  &vertexModule));
 
 	// Fragment module
 	VkShaderModuleCreateInfo fragmentCreateInfo{};
@@ -46,7 +52,10 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	fragmentCreateInfo.codeSize = fragmentShader.Size();
 	fragmentCreateInfo.pCode = reinterpret_cast<const uint32_t*>(fragmentShaderSource.GetData());
 
-	VK_CHECK(vkCreateShaderModule(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, &fragmentCreateInfo, VulkanRenderer::m_VulkanData.s_Allocator, &fragmentModule));
+	VK_CHECK(vkCreateShaderModule(m_Device.m_LogicalDevice,
+								  &fragmentCreateInfo,
+								  &m_Allocator,
+								  &fragmentModule));
 
 	// Shader stage creation vertex
 	VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
@@ -76,9 +85,9 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	// TODO not hardcode this dude
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.vertexAttributeDescriptionCount = VulkanRenderer::m_VulkanData.s_VertexBuffer.s_AttributeDescriptions.Size();
-	vertexInputInfo.pVertexBindingDescriptions = &VulkanRenderer::m_VulkanData.s_VertexBuffer.s_BindingDescription;
-	vertexInputInfo.pVertexAttributeDescriptions = &VulkanRenderer::m_VulkanData.s_VertexBuffer.s_AttributeDescriptions[0];
+	vertexInputInfo.vertexAttributeDescriptionCount = config.s_VertexBuffer.m_AttributeDescriptions.Size();
+	vertexInputInfo.pVertexBindingDescriptions = &config.s_VertexBuffer.m_BindingDescription;
+	vertexInputInfo.pVertexAttributeDescriptions = &config.s_VertexBuffer.m_AttributeDescriptions[0];
 
 	// Input assembly
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -90,15 +99,15 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	VkViewport viewport{};
 	viewport.x = 0.0f;
 	viewport.y = 0.0f;
-	viewport.width = (float)VulkanRenderer::m_VulkanData.s_Swapchain.s_Width;
-	viewport.height = (float)VulkanRenderer::m_VulkanData.s_Swapchain.s_Height;
+	viewport.width = (float)config.s_Width;
+	viewport.height = (float)config.s_Height;
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
 
 	// Scissor
 	VkRect2D scissor{};
 	scissor.offset = { 0, 0 };
-	scissor.extent = VulkanRenderer::m_VulkanData.s_Swapchain.s_Extent;
+	scissor.extent = { config.s_Width, config.s_Height };
 
 	VkPipelineViewportStateCreateInfo viewportStateInfo{};
 	viewportStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -169,10 +178,13 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelineLayoutInfo.setLayoutCount = 1;
-	pipelineLayoutInfo.pSetLayouts = &outPipeline->s_DescriptorSetLayout;
+	pipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
 	pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
 	pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
-	VK_CHECK(vkCreatePipelineLayout(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, &pipelineLayoutInfo, VulkanRenderer::m_VulkanData.s_Allocator, &outPipeline->s_Layout));
+	VK_CHECK(vkCreatePipelineLayout(m_Device.m_LogicalDevice,
+									&pipelineLayoutInfo,
+									&m_Allocator,
+									&m_Layout));
 
 	// Finally creating the pipeline
 	VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -190,90 +202,83 @@ bool VulkanPipelineUtils::Create(VulkanPipeline* outPipeline) {
 	pipelineInfo.pDynamicState = &dynamicState;
 
 	// Fixed function state
-	pipelineInfo.layout = outPipeline->s_Layout;
-	pipelineInfo.renderPass = outPipeline->s_Renderpass.s_Handle;
+	pipelineInfo.layout = m_Layout;
+	pipelineInfo.renderPass = m_Renderpass.m_Handle;
 	pipelineInfo.subpass = 0;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-	VK_CHECK(vkCreateGraphicsPipelines(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice,
+	VK_CHECK(vkCreateGraphicsPipelines(m_Device.m_LogicalDevice,
 										VK_NULL_HANDLE,
 										1,
 										&pipelineInfo,
-										VulkanRenderer::m_VulkanData.s_Allocator,
-										&outPipeline->s_Handle));
+										&m_Allocator,
+										&m_Handle));
 	EN_DEBUG("Graphics pipeline created.");
 
 	// Destroy shader modules as soon as pipeline creation is finishes
-	vkDestroyShaderModule(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, vertexModule, VulkanRenderer::m_VulkanData.s_Allocator);
-	vkDestroyShaderModule(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, fragmentModule, VulkanRenderer::m_VulkanData.s_Allocator);
-
-	return true;
+	vkDestroyShaderModule(m_Device.m_LogicalDevice,
+						  vertexModule,
+						  &m_Allocator);
+	vkDestroyShaderModule(m_Device.m_LogicalDevice,
+						  fragmentModule,
+						  &m_Allocator);
 }
 
-void VulkanPipelineUtils::Bind(VulkanPipeline* pipeline, VulkanCommandbuffer* commandbuffer) {
-	vkCmdBindPipeline(commandbuffer->s_Handle, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->s_Handle);
+void VulkanPipeline::bind(VulkanCommandbuffer* commandbuffer) {
+	vkCmdBindPipeline(commandbuffer->m_Handle, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Handle);
 }
 
-void VulkanPipelineUtils::Destroy(VulkanPipeline* pipeline) {
-	vkDestroyPipeline(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, pipeline->s_Handle, VulkanRenderer::m_VulkanData.s_Allocator);
-	vkDestroyPipelineLayout(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, pipeline->s_Layout, VulkanRenderer::m_VulkanData.s_Allocator);
-}
-
-bool VulkanPipelineUtils::CreateDescriptorPool() {
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
-
+bool VulkanPipeline::createDescriptorPool() {
 	DArray<VkDescriptorPoolSize> poolSizes;
 	poolSizes.Resize(2);
 
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSizes[0].descriptorCount = static_cast<uint32_t>(d->s_FramesInFlight);
+	poolSizes[0].descriptorCount = static_cast<uint32_t>(m_FramesInFlight);
 	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	poolSizes[1].descriptorCount = static_cast<uint32_t>(d->s_FramesInFlight);
+	poolSizes[1].descriptorCount = static_cast<uint32_t>(m_FramesInFlight);
 
 	VkDescriptorPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = 2;
 	poolInfo.pPoolSizes = poolSizes.GetData();
-	poolInfo.maxSets = static_cast<uint32_t>(d->s_FramesInFlight);
+	poolInfo.maxSets = static_cast<uint32_t>(m_FramesInFlight);
 
-	VK_CHECK(vkCreateDescriptorPool(d->s_Device.s_LogicalDevice, &poolInfo, d->s_Allocator, &d->s_DescriptorPool));
+	VK_CHECK(vkCreateDescriptorPool(m_Device.m_LogicalDevice, &poolInfo, &m_Allocator, &m_DescriptorPool));
 	return true;
 }
 
-bool VulkanPipelineUtils::CreateDescriptorSets() {
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
-
+bool VulkanPipeline::createDescriptorSets(const VkImageView& imageView, const UniformBuffer& uniformBuffer, const VkSampler& sampler) {
 	// This surely breaks something I guess
 	DArray<VkDescriptorSetLayout> layouts;
-	for (unsigned int i = 0; i < d->s_FramesInFlight; i++) {
-		layouts.PushBack(d->s_Pipeline.s_DescriptorSetLayout);
+	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
+		layouts.PushBack(m_DescriptorSetLayout);
 	}
 
 	VkDescriptorSetAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = d->s_DescriptorPool;
-	allocInfo.descriptorSetCount = static_cast<uint32_t>(d->s_FramesInFlight);
+	allocInfo.descriptorPool = m_DescriptorPool;
+	allocInfo.descriptorSetCount = static_cast<uint32_t>(m_FramesInFlight);
 	allocInfo.pSetLayouts = layouts.GetData();
 
-	d->s_DescriptorSets.Resize(d->s_FramesInFlight);
-	VK_CHECK(vkAllocateDescriptorSets(d->s_Device.s_LogicalDevice, &allocInfo, d->s_DescriptorSets.GetData()));
+	m_DescriptorSets.Resize(m_FramesInFlight);
+	VK_CHECK(vkAllocateDescriptorSets(m_Device.m_LogicalDevice, &allocInfo, m_DescriptorSets.GetData()));
 
-	for (unsigned int i = 0; i < d->s_FramesInFlight; i++) {
+	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
 		VkDescriptorBufferInfo bufferInfo{};
-		bufferInfo.buffer = d->s_UniformBuffer.s_UniformBuffers[i];
+		bufferInfo.buffer = uniformBuffer.m_Buffers[i]->m_Handle;
 		bufferInfo.offset = 0;
 		bufferInfo.range = sizeof(UniformBufferObject);
 
 		VkDescriptorImageInfo imageInfo{};
 		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		imageInfo.imageView = d->s_VulkanImage.s_View;
-		imageInfo.sampler = d->s_Sampler;
+		imageInfo.imageView = imageView;
+		imageInfo.sampler = sampler;
 
 		DArray<VkWriteDescriptorSet> descriptorWrites;
 		descriptorWrites.Resize(2);
 
 		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[0].dstSet = d->s_DescriptorSets[i];
+		descriptorWrites[0].dstSet = m_DescriptorSets[i];
 		descriptorWrites[0].dstBinding = 0;
 		descriptorWrites[0].dstArrayElement = 0;
 		descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -281,20 +286,20 @@ bool VulkanPipelineUtils::CreateDescriptorSets() {
 		descriptorWrites[0].pBufferInfo = &bufferInfo;
 
 		descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites[1].dstSet = d->s_DescriptorSets[i];
+		descriptorWrites[1].dstSet = m_DescriptorSets[i];
 		descriptorWrites[1].dstBinding = 1;
 		descriptorWrites[1].dstArrayElement = 0;
 		descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		descriptorWrites[1].descriptorCount = 1;
 		descriptorWrites[1].pImageInfo = &imageInfo;
 
-		vkUpdateDescriptorSets(d->s_Device.s_LogicalDevice, static_cast<uint32_t>(descriptorWrites.Size()), descriptorWrites.GetData(), 0, nullptr);
+		vkUpdateDescriptorSets(m_Device.m_LogicalDevice, static_cast<uint32_t>(descriptorWrites.Size()), descriptorWrites.GetData(), 0, nullptr);
 	}
 
 	return true;
 }
 
-bool VulkanPipelineUtils::CreateDescriptorSetLayout(VulkanPipeline& pipeline) {
+bool VulkanPipeline::createDescriptorSetLayout() {
 	VkDescriptorSetLayoutBinding uboLayoutBinding{};
 	uboLayoutBinding.binding = 0;
 	uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -318,10 +323,17 @@ bool VulkanPipelineUtils::CreateDescriptorSetLayout(VulkanPipeline& pipeline) {
 	layoutInfo.bindingCount = (unsigned int) layoutBindings.Size();
 	layoutInfo.pBindings = layoutBindings.Data();
 
-	VK_CHECK(vkCreateDescriptorSetLayout(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice,
+	VK_CHECK(vkCreateDescriptorSetLayout(m_Device.m_LogicalDevice,
 										&layoutInfo,
-										nullptr,
-										&pipeline.s_DescriptorSetLayout));
+										&m_Allocator,
+										&m_DescriptorSetLayout));
 	return true;
 }
 
+VulkanPipeline::~VulkanPipeline() {
+	vkDestroyDescriptorPool(m_Device.m_LogicalDevice, m_DescriptorPool, nullptr);
+	vkDestroyDescriptorSetLayout(m_Device.m_LogicalDevice, m_DescriptorSetLayout, &m_Allocator);
+
+	vkDestroyPipeline(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
+	vkDestroyPipelineLayout(m_Device.m_LogicalDevice, m_Layout, &m_Allocator);
+}

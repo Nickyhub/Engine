@@ -1,4 +1,6 @@
 #pragma once
+#include <functional>
+
 #include "containers/Array.hpp"
 
 enum EventType {
@@ -26,13 +28,15 @@ union EventContext {
 	float f32[4];
 };
 
-typedef bool (*pfnOnEvent)(const void* sender, EventContext context, EventType type);
+//typedef bool (*pfnOnEvent)(const void* sender, EventContext context, EventType type);
+typedef std::function<bool(const void* sender, EventContext context, EventType type)> pfnOnEvent;
+
 #define MAX_REGISTERED_EVENT_CALLBACKS 512
 
 class RegisteredEvent {
 public:
 	RegisteredEvent() = default;
-	RegisteredEvent(const void* sender, pfnOnEvent callback, EventType type);
+	RegisteredEvent(const void* sender, EventType type, pfnOnEvent callback);
 
 	//Getters and setters
 	const int GetID() const { return m_ID; }
@@ -52,10 +56,10 @@ private:
 class EventSystem final{
 public:
 	static bool Initialize();
-	static bool RegisterEvent(const void* sender, pfnOnEvent callback, EventType type);
+	static bool RegisterEvent(const void* sender, EventType type, pfnOnEvent callback);
 	static void FireEvent(const void* sender, const EventContext& context, EventType type);
 	static void Shutdown();
-	static Array <RegisteredEvent, MAX_REGISTERED_EVENT_CALLBACKS> GetRegisteredEvents() { return m_RegisteredEvents; }
+	static Array<RegisteredEvent, MAX_REGISTERED_EVENT_CALLBACKS> GetRegisteredEvents() { return m_RegisteredEvents; }
 	static Array<RegisteredEvent, MAX_REGISTERED_EVENT_CALLBACKS> m_RegisteredEvents;
 private:
 	static unsigned int m_IDCounter;

@@ -1,28 +1,32 @@
 #pragma once
 
 #include <windows.h>
-#include "Logger.hpp"
-#include "renderer/vulkan/VulkanUtils.hpp"
+#include <vulkan/vulkan.h>
 
-struct PlatformConfig {
-	const char* Name;
-	unsigned int Width;
-	unsigned int Height;
-};
+#include "Logger.hpp"
 
 class Platform {
 public:
-	static bool Initialize(PlatformConfig config);
-	static void Shutdown();
-	static void PumpMessages();
-	static void LogMessage(LogLevel level, const char* message, ...);
-	static double GetAbsoluteTime();
-	static void PSleep(long ms);
-	static const char* GetVulkanExtensions() { return "VK_KHR_win32_surface"; }
-	static bool CreateVulkanSurface(VulkanData& data);
-	static void DestroyVulkanSurface(const VulkanData& data);
+	Platform() = delete;
+	Platform(const char* name, unsigned int width, unsigned int height);
+	~Platform();
+
+	void pumpMessages();
+	static void logMessage(LogLevel level, const char* message, ...);
+	void pSleep(long ms);
+	static double getAbsoluteTime();
+	static VkSurfaceKHR createVulkanSurface(const VkInstance& instance, const VkAllocationCallbacks& allocator);
+	static void destroyVulkanSurface(VkSurfaceKHR surface, VkInstance instance, VkAllocationCallbacks allocator);
+
+	static unsigned int Width;
+	static unsigned int Height;
+
 	//Windows specific function callback to handle messages for events
-	static LRESULT CALLBACK HandleWin32Messages(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+	static const char* getVulkanExtensions() { return "VK_KHR_win32_surface"; }
+	static LRESULT CALLBACK handleWin32Messages(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+private:
+	bool create(const char* name, unsigned int width, unsigned int height);
+	void destroy();
 private:
 	static HWND m_Handle;
 	static HINSTANCE m_hInstance;

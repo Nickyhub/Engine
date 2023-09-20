@@ -1,29 +1,28 @@
 #include "VulkanSyncObjects.hpp"
-#include "VulkanRenderer.hpp"
+#include "VulkanUtils.hpp"
+#include "VulkanDevice.hpp"
 
-bool VulkanSyncObjects::CreateVkSemaphore(VkSemaphore* outSemaphore) {
+#include "core/Logger.hpp"
+
+VulkanSemaphore::VulkanSemaphore(const VulkanDevice& device, const VkAllocationCallbacks& allocator)
+	: m_Device(device), m_Allocator(allocator) {
 	VkSemaphoreCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
-	VK_CHECK(vkCreateSemaphore(d->s_Device.s_LogicalDevice, &createInfo, d->s_Allocator, outSemaphore));
-	return true;
+	VK_CHECK(vkCreateSemaphore(m_Device.m_LogicalDevice, &createInfo, &m_Allocator, &m_Handle));
 }
 
-bool VulkanSyncObjects::CreateVkFence(VkFence* outFence) {
+VulkanSemaphore::~VulkanSemaphore() {
+	vkDestroySemaphore(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
+}
+
+VulkanFence::VulkanFence(const VulkanDevice& device, const VkAllocationCallbacks& allocator)
+	: m_Device(device), m_Allocator(allocator) {
 	VkFenceCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	createInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
-	VK_CHECK(vkCreateFence(d->s_Device.s_LogicalDevice, &createInfo, d->s_Allocator, outFence));
-	return true;
+	VK_CHECK(vkCreateFence(m_Device.m_LogicalDevice, &createInfo, &m_Allocator, &m_Handle));
 }
 
-void VulkanSyncObjects::DestroyVkSemaphore(VkSemaphore* semaphore) {
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
-	vkDestroySemaphore(d->s_Device.s_LogicalDevice, *semaphore, d->s_Allocator);
-}
-
-void VulkanSyncObjects::DestroyVkFence(VkFence* fence) {
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
-	vkDestroyFence(d->s_Device.s_LogicalDevice, *fence, d->s_Allocator);
+VulkanFence::~VulkanFence() {
+	vkDestroyFence(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
 }

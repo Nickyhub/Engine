@@ -1,13 +1,29 @@
 #pragma once
 #include <vulkan/vulkan.h>
+#include "VulkanRenderpass.hpp"
+#include "VulkanImage.hpp"
+#include "VulkanSwapchain.hpp"
 
-struct VulkanFramebuffer {
-	VkFramebuffer s_Handle;
+struct VulkanFramebufferConfig {
+	unsigned int s_Width;
+	unsigned int s_Height;
+	unsigned int imageIndex;
+
+	const VkAllocationCallbacks& s_Allocator;
+	const VulkanDevice& s_Device;
+	const VulkanImage& s_DepthImage;
+	const VulkanRenderpass& s_Renderpass;
+	const VulkanSwapchain& s_Swapchain;
 };
 
-class VulkanFramebufferUtils {
+class VulkanFramebuffer {
 public:
-	static bool Create(VulkanFramebuffer* outFrambuffer, unsigned int imageIndex);
-
-	static void Destroy(VulkanFramebuffer* frambuffer);
+	VulkanFramebuffer() = delete;
+	VulkanFramebuffer(const VulkanFramebufferConfig& config);
+	~VulkanFramebuffer();
+public:
+	VkFramebuffer m_Handle;
+private:
+	const VkAllocationCallbacks& m_Allocator;
+	const VulkanDevice& m_Device;
 };

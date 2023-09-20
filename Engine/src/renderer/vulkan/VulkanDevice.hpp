@@ -1,8 +1,9 @@
 #pragma once
 #include <vulkan/vulkan.h>
+#include "VulkanInstance.hpp"
+
 #include "containers/DArray.hpp"
 #include "Defines.hpp"
-#include "VulkanSwapchain.hpp"
 
 struct VulkanDeviceSwapchainSupportInfo {
 	unsigned int s_FormatCount = 0;
@@ -14,48 +15,49 @@ struct VulkanDeviceSwapchainSupportInfo {
 	VkSurfaceCapabilitiesKHR s_Capabilities{};
 };
 
-struct  VulkanDevice {
-	VkPhysicalDevice s_PhysicalDevice = nullptr;
-	VkDevice s_LogicalDevice = nullptr;
-
-	VkPhysicalDeviceFeatures s_Features{};
-	VkPhysicalDeviceProperties s_Properties{};
-	VkPhysicalDeviceMemoryProperties s_Memory{};
-
-	VulkanDeviceSwapchainSupportInfo s_SwapchainSupportInfo;
-
-	VkCommandPool s_CommandPool = nullptr;
-
-	VkQueue s_GraphicsQueue = nullptr;
-	VkQueue s_PresentQueue = nullptr;
-	VkQueue s_ComputeQueue = nullptr;
-	VkQueue s_TransferQueue = nullptr;
-	unsigned int s_GraphicsQueueFamilyIndex = INVALID_ID;
-	unsigned int s_ComputeQueueFamilyIndex = INVALID_ID;
-	unsigned int s_PresentQueueFamilyIndex = INVALID_ID;
-	unsigned int s_TransferQueueFamilyIndex = INVALID_ID;
-};
-
 struct VulkanPhysicalDeviceRequirements {
 	bool s_GraphicsQueue = false;
 	bool s_PresentQueue = false;
 	bool s_TransferQueue = false;
 	bool s_ComputeQueue = false;
-
-	//std::vector < const char*> s_RequiredExtensions;
 	DArray<const char*> s_RequiredExtensions;
 
 	bool s_SamplerAnisotropy = false;
 	bool s_DiscreteGPU = false;
 };
 
-class VulkanDeviceUtils {
+class VulkanDevice {
 public:
-	static bool Create(VulkanDevice* outDevice);
-	static void Destroy(VulkanDevice* device);
-	
+	VulkanDevice() = delete;
+	VulkanDevice(const VulkanInstance& instance, bool enableSamplerAnisotropy, bool enableFillModeNonSolid);
+	~VulkanDevice();
+	VkFormat findDepthFormat() const;
 private:
-	static bool QuerySwapchainSupport(const VkPhysicalDevice* device);
-	static VkPhysicalDevice SelectPhysicalDevice();
-	static bool PhysicalDeviceMeetsRequirements(const VkPhysicalDevice* device, const VulkanPhysicalDeviceRequirements& requirements);
+	bool querySwapchainSupport(const VkPhysicalDevice* device);
+	VkPhysicalDevice selectPhysicalDevice();
+	bool physicalDeviceMeetsRequirements(const VkPhysicalDevice* device, const VulkanPhysicalDeviceRequirements& requirements);
+	
+public:
+	VkDevice m_LogicalDevice = nullptr;
+	VkPhysicalDevice m_PhysicalDevice = nullptr;
+	VkSurfaceKHR m_Surface;
+	VulkanDeviceSwapchainSupportInfo m_SwapchainSupportInfo;
+
+	unsigned int m_GraphicsQueueFamilyIndex = INVALID_ID;
+	unsigned int m_ComputeQueueFamilyIndex = INVALID_ID;
+	unsigned int m_PresentQueueFamilyIndex = INVALID_ID;
+	unsigned int m_TransferQueueFamilyIndex = INVALID_ID;
+
+	VkQueue m_PresentQueue = nullptr;
+	VkQueue m_GraphicsQueue = nullptr;
+	VkCommandPool m_CommandPool = nullptr;
+private:
+	VkPhysicalDeviceFeatures m_Features{};
+	VkPhysicalDeviceProperties m_Properties{};
+	VkPhysicalDeviceMemoryProperties m_Memory{};
+
+	VkQueue m_ComputeQueue = nullptr;
+	VkQueue m_TransferQueue = nullptr;
+
+	const VulkanInstance& m_Instance;
 };

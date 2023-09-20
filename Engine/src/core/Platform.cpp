@@ -1,18 +1,28 @@
 #include "Platform.hpp"
-#include "Event.hpp"
-#include "Input.hpp"
-#include <vulkan/vulkan.h>
-#include <vulkan/vulkan_win32.h>
+
 #include <windowsx.h>
+#include <vulkan/vulkan_win32.h>
 #include <stdio.h>
 
-//Define static variables again for some stupid reason
+#include "Event.hpp"
+#include "Input.hpp"
+#include "renderer/vulkan/VulkanUtils.hpp"
+
 HWND Platform::m_Handle;
 HINSTANCE Platform::m_hInstance;
 LARGE_INTEGER Platform::m_PerformanceFrequency;
 
+Platform::Platform(const char* name, unsigned int width, unsigned int height) {
+	if (!create(name, width, height)) {
+		EN_ERROR("Failed to initialize Platform.");
+	}
+}
 
-bool Platform::Initialize(PlatformConfig config)
+Platform::~Platform() {
+	destroy();
+}
+
+bool Platform::create(const char* name, unsigned int width, unsigned int height)
 {
 	QueryPerformanceFrequency(&m_PerformanceFrequency);
 	const char* className = "WindowClassName";
@@ -23,7 +33,7 @@ bool Platform::Initialize(PlatformConfig config)
 
 	// Fill out window class
 	WNDCLASSA wc = {};
-	wc.lpfnWndProc = HandleWin32Messages;
+	wc.lpfnWndProc = handleWin32Messages;
 	wc.hInstance = hInstance;
 	wc.lpszClassName = className;
 	wc.hCursor = LoadCursor(NULL, IDC_ARROW);
@@ -38,8 +48,8 @@ bool Platform::Initialize(PlatformConfig config)
 	RECT rect{};
 	rect.left = 0;
 	rect.top = 0;
-	rect.right = config.Width;
-	rect.bottom = config.Height;
+	rect.right = width;
+	rect.bottom = height;
 
 	AdjustWindowRectEx(&rect, windowStyle, 0, windowExStyle);
 
@@ -56,7 +66,7 @@ bool Platform::Initialize(PlatformConfig config)
 	m_Handle = CreateWindowExA(
 		windowExStyle,
 		className,
-		config.Name,
+		name,
 		windowStyle,
 		CW_USEDEFAULT, CW_USEDEFAULT, actualWidth,actualHeight,
 		NULL,
@@ -76,19 +86,19 @@ bool Platform::Initialize(PlatformConfig config)
 	return true;
 }
 
-double Platform::GetAbsoluteTime() {
+double Platform::getAbsoluteTime() {
 	LARGE_INTEGER counter;
 	QueryPerformanceCounter(&counter);
 	return (double)counter.QuadPart / m_PerformanceFrequency.QuadPart;
 }
 
-void Platform::PSleep(long ms) {
+void Platform::pSleep(long ms) {
 	if(ms > 0) {
 		Sleep(ms);
 	}
 }
 
-void Platform::LogMessage(LogLevel level, const char* message, ...) {
+void Platform::logMessage(LogLevel level, const char* message, ...) {
 	unsigned int colour = 0;
 	switch (level)
 	{
@@ -127,29 +137,27 @@ void Platform::LogMessage(LogLevel level, const char* message, ...) {
 	WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), message, (DWORD)length, numberWritten, 0);
 }
 
-bool Platform::CreateVulkanSurface(VulkanData& data) {
+VkSurfaceKHR Platform::createVulkanSurface(const VkInstance& instance, const VkAllocationCallbacks& allocator) {
 	VkWin32SurfaceCreateInfoKHR createInfo = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
 	createInfo.hinstance = m_hInstance;
 	createInfo.hwnd = m_Handle;
 
-	VkResult result = vkCreateWin32SurfaceKHR(data.s_Instance, &createInfo, data.s_Allocator, &data.s_Surface);
-	if (result != VK_SUCCESS) {
-		EN_FATAL("Could not created surface. Shutting down.");
-		return false;
-	}
-
+	VkSurfaceKHR result;
+	VK_CHECK(vkCreateWin32SurfaceKHR(instance, &createInfo, &allocator, &result));
 	EN_INFO("Surface created.");
-	return true;
+	return result;
 }
 
-void Platform::DestroyVulkanSurface(const VulkanData& data) {
+void Platform::destroyVulkanSurface(VkSurfaceKHR surface, VkInstance instance, VkAllocationCallbacks allocator) {
 	EN_DEBUG("Destroying vulkan surface.");
-	if (data.s_Surface) {
-		vkDestroySurfaceKHR(data.s_Instance, data.s_Surface, data.s_Allocator);
+	if (surface) {
+		vkDestroySurfaceKHR(instance,
+			surface,
+			&allocator);
 	}
 }
 
-void Platform::PumpMessages() {
+void Platform::pumpMessages() {
 	MSG msg = { };
 	while (PeekMessageA(&msg, m_Handle, 0, 0, PM_REMOVE) > 0)
 	{
@@ -158,13 +166,13 @@ void Platform::PumpMessages() {
 	}
 }
 
-void Platform::Shutdown()
+void Platform::destroy()
 {
 	EN_DEBUG("Shutting down platform.");
 	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 8);
 }
 
-LRESULT CALLBACK Platform::HandleWin32Messages(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK Platform::handleWin32Messages(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 
 	switch (uMsg) {
 		case WM_SIZE: {
@@ -226,7 +234,7 @@ LRESULT CALLBACK Platform::HandleWin32Messages(HWND hwnd, UINT uMsg, WPARAM wPar
 		case WM_KEYUP:
 		case WM_SYSKEYDOWN:
 		case WM_SYSKEYUP: {
-			EventContext c;
+			EventContext c{};
 			c.u32[0] = (int)wParam;
 
 			// TODO handle alt, shift... keys as well

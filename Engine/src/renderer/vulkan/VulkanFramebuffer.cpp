@@ -1,29 +1,32 @@
 #include "VulkanFramebuffer.hpp"
-#include "VulkanRenderer.hpp"
+#include "VulkanUtils.hpp"
+#include "VulkanDevice.hpp"
+
+#include "core/Logger.hpp"
 #include "containers/Array.hpp"
 
-bool VulkanFramebufferUtils::Create(VulkanFramebuffer* outFrambuffer, unsigned int imageIndex) {
+VulkanFramebuffer::VulkanFramebuffer(const VulkanFramebufferConfig& config) 
+	: m_Device(config.s_Device), m_Allocator(config.s_Allocator) {
+
 	Array<VkImageView, 2> attachments;
-	attachments[0] = VulkanRenderer::m_VulkanData.s_Swapchain.s_ImageViews[imageIndex];
-	attachments[1] = VulkanRenderer::m_VulkanData.s_DepthImage.s_View;
+	attachments[0] = config.s_Swapchain.m_ImageViews[config.imageIndex];
+	attachments[1] = config.s_DepthImage.m_View;
 
 	VkFramebufferCreateInfo framebufferInfo{};
 	framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	framebufferInfo.renderPass = VulkanRenderer::m_VulkanData.s_Pipeline.s_Renderpass.s_Handle;
+	framebufferInfo.renderPass = config.s_Renderpass.m_Handle;
 	framebufferInfo.attachmentCount = (uint32_t) attachments.Size();
 	framebufferInfo.pAttachments = attachments.Data();
-	framebufferInfo.width = VulkanRenderer::m_VulkanData.s_Swapchain.s_Width;
-	framebufferInfo.height = VulkanRenderer::m_VulkanData.s_Swapchain.s_Height;
+	framebufferInfo.width = config.s_Width;
+	framebufferInfo.height = config.s_Height;
 	framebufferInfo.layers = 1;
 
-	VK_CHECK(vkCreateFramebuffer(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice,
+	VK_CHECK(vkCreateFramebuffer(m_Device.m_LogicalDevice,
 								&framebufferInfo,
-								VulkanRenderer::m_VulkanData.s_Allocator,
-								&outFrambuffer->s_Handle));
-
-	return true;
+								&m_Allocator,
+								&m_Handle));
 }
 
-void VulkanFramebufferUtils::Destroy(VulkanFramebuffer* frambuffer) {
-
+VulkanFramebuffer::~VulkanFramebuffer() {
+	vkDestroyFramebuffer(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
 }

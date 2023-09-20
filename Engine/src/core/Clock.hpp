@@ -2,6 +2,8 @@
 
 class Clock {
 public:
+	Clock() { m_Elapsed = 0; m_StartTime = 0; }
+	~Clock() {}
 	void Start();
 	void Update();
 

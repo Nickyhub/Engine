@@ -2,33 +2,52 @@
 #include <vulkan/vulkan.h>
 #include "containers/DArray.hpp"
 #include "Defines.hpp"
-#include "VulkanFramebuffer.hpp"
 
-struct VulkanSwapchain {
-	VkSwapchainKHR s_Handle= nullptr;
-	VkSurfaceFormatKHR s_SurfaceFormat{};
-	VkPresentModeKHR s_PresentMode{};
-	VkExtent2D s_Extent;
+#include "VulkanDevice.hpp"
+#include "VulkanSyncObjects.hpp"
 
-	DArray<VulkanFramebuffer> s_Framebuffers;
-
-	unsigned int s_CurrentSwapchainImageIndex = INVALID_ID;
-
-	DArray<VkImage> s_Images;
-	unsigned int s_ImageCount = 0;
-
-	DArray<VkImageView> s_ImageViews;
-	unsigned int s_ImageViewCount = 0;
-
-	unsigned int s_Width = 0;
-	unsigned int s_Height = 0;
+struct VulkanSwapchainConfig {
+	unsigned int s_Width, s_Height;
+	const VulkanDevice& s_Device;
+	const VkAllocationCallbacks& s_Allocator;
 };
 
-class VulkanSwapchainUtils {
+class VulkanSwapchain {
 public:
-	static bool Create(VulkanSwapchain* outSwapchain, unsigned int width, unsigned int height);
-	static bool Recreate(VulkanSwapchain* outSwapchain, unsigned int width, unsigned int  height);
-	static bool AcquireNextImage(VulkanSwapchain* outSwapchain);
-	static bool Present(VulkanSwapchain* swapchain);
-	static void Destroy(VulkanSwapchain* swapchain);
+	VulkanSwapchain() = delete;
+	VulkanSwapchain(const VulkanSwapchainConfig& config);
+
+	void createSyncObjects(unsigned int framesInFlight);
+
+	bool recreate(const VulkanSwapchainConfig& config);
+	bool acquireNextImage();
+	bool present();
+
+	~VulkanSwapchain();
+private:
+	bool create(const VulkanSwapchainConfig& config);
+	void destroy();
+public:
+	unsigned int m_Width = 0;
+	unsigned int m_Height = 0;
+	unsigned int m_ImageCount = 0;
+	unsigned int m_CurrentFrame = 0; 
+	unsigned int m_CurrentSwapchainImageIndex = INVALID_ID;
+
+	const VkAllocationCallbacks& m_Allocator;
+	const VulkanDevice& m_Device;
+	VkExtent2D m_Extent;
+	VkSurfaceFormatKHR m_SurfaceFormat{};
+	DArray<VkImageView> m_ImageViews;
+
+	// Sync Objects
+	DArray<VulkanSemaphore*> m_ImageAvailableSemaphores{};
+	DArray<VulkanSemaphore*> m_RenderFinishedSemaphores{};
+	DArray<VulkanFence*> m_InFlightFences{};
+private:
+	VkSwapchainKHR m_Handle = nullptr;
+	VkPresentModeKHR m_PresentMode{};
+	DArray<VkImage> m_Images;
+
+	unsigned int m_ImageViewCount = 0;
 };

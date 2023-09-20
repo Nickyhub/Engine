@@ -1,35 +1,51 @@
 #pragma once
 #include "Event.hpp"
 #include "Clock.hpp"
+#include "Platform.hpp"
+#include "renderer/vulkan/VulkanRenderer.hpp"
 
 struct ApplicationConfig {
 	unsigned int TargetTicksPerSecond;
-	unsigned int Width;
-	unsigned int Height;
-	const char* Name;
+	unsigned int s_Width;
+	unsigned int s_Height;
+	const char* s_Name;
+};
+
+//class Platform;
+
+struct SystemsConfig {
+	unsigned int s_Width;
+	unsigned int s_Heigth;
+	const char* s_Name;
+};
+
+struct Systems {
+	Systems(const SystemsConfig& config);
+	Platform s_Platform;
+	VulkanRenderer s_Renderer;
 };
 
 class Application
 {
 public:
 	Application() = delete;
-	~Application() = delete;
+	Application(const ApplicationConfig& config);
+	~Application();
 
-	static bool Initialize(ApplicationConfig* config);
-	static void Run();
-	static void Shutdown();
+	void run();
 	
 	//On Event functions
-	static bool OnClose(const void* sender, EventContext context, EventType type);
-	static bool OnResize(const void* sender, EventContext context, EventType type);
-	static bool OnKey(const void* sender, EventContext context, EventType type);
-	// Probably will be adding more in the future
+	/*bool OnClose(const void* sender, EventContext context, EventType type);
+	bool OnResize(const void* sender, EventContext context, EventType type);
+	bool OnKey(const void* sender, EventContext context, EventType type);*/
+	// Currently as lambdas in constructor
 
-	static const ApplicationConfig GetConfig() { return m_Config; }
-
+	const ApplicationConfig getConfig() { return m_Config; }
+public:
+	Systems m_Systems;
 private:
-	static Clock m_Clock;
-	static ApplicationConfig m_Config;
-	static bool m_Running;
+	Clock m_Clock;
+	ApplicationConfig m_Config{};
+	bool m_Running;
 };
 

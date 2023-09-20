@@ -1,130 +1,120 @@
 #ifndef STB_IMAGE_IMPLEMENTATION
-	#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
 #endif
 
 #include <stb_image.h>
 
+#include "core/Application.hpp"
+#include "core/Logger.hpp"
 #include "VulkanImage.hpp"
 #include "VulkanBuffer.hpp"
-#include "VulkanRenderer.hpp"
-#include "core/Logger.hpp"
+#include "VulkanCommandbuffer.hpp"
+#include "VulkanUtils.hpp"
 
 /**
- * Creates a VkImage with staging buffer. Transitions the Layout and automatically creates VkImageView as well as the texture sampler
- * TODO this should all be a little more seperated and handled by a texture system
+ * Depending on the usage a depth image and its view will be created. If it is a colored image it
+ * will be loaded and created with a staging buffer.
+ * TODO Do not hard code the path of colored image. Wrap this in a general texture system
  */
-bool VulkanImageUtils::Create(VulkanImage& outImage) {
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
+VulkanImage::VulkanImage(const VulkanImageConfig& config)
+	: m_Device(config.s_Device), m_Allocator(config.s_Allocator) {
+	VkMemoryRequirements memRequirements;
+	vkGetImageMemoryRequirements(m_Device.m_LogicalDevice, m_Handle, &memRequirements);
+	switch (config.s_Usage) {
+		case VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT: {
+			createImage(config, VulkanBuffer::findMemoryType(m_Device, memRequirements.memoryTypeBits, config.s_Properties));
+			createImageView(config.s_Format, VK_IMAGE_ASPECT_DEPTH_BIT);
+		}
+		case VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT: {
+			stbi_uc* pixels = stbi_load("assets/textures/texture.jpg", &m_Width, &m_Height, &m_Channels, STBI_rgb_alpha);
+			VkDeviceSize imageSize = (VkDeviceSize)m_Width * m_Height * 4;
 
-	stbi_uc* pixels = stbi_load("assets/textures/texture.jpg", &outImage.s_Width, &outImage.s_Height, &outImage.s_Channels, STBI_rgb_alpha);
-	VkDeviceSize imageSize = (VkDeviceSize)outImage.s_Width * outImage.s_Height * 4;
+			if (!pixels) {
+				EN_ERROR("Failed to load image from disk.");
+			}
 
-	if (!pixels) {
-		EN_ERROR("Failed to load image from disk.");
-		return false;
-	}
+			// Create staging buffer
+			VulkanBuffer stagingBuffer(m_Device,
+				imageSize,
+				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+				m_Allocator);
 
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingBufferMemory;
+			// Copy pixel data to staging buffer
+			void* data;
+			vkMapMemory(m_Device.m_LogicalDevice, stagingBuffer.m_Memory, 0, imageSize, 0, &data);
+			Memory::Copy(data, pixels, (unsigned int)imageSize);
+			vkUnmapMemory(m_Device.m_LogicalDevice, stagingBuffer.m_Memory);
 
-	// Create staging buffer
-	VulkanBufferUtils::CreateBuffer(imageSize,
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		stagingBufferMemory,
-		stagingBuffer);
+			// Clean up pixel data
+			stbi_image_free(pixels);
 
-	// Copy pixel data to staging buffer
-	void* data;
-	vkMapMemory(d->s_Device.s_LogicalDevice, stagingBufferMemory, 0, imageSize, 0, &data);
-	Memory::Copy(data, pixels, (unsigned int)imageSize);
-	vkUnmapMemory(d->s_Device.s_LogicalDevice, stagingBufferMemory);
+			if (!createImage(config,
+							 stagingBuffer.findMemoryType(m_Device, memRequirements.memoryTypeBits, config.s_Properties))) {
+				EN_ERROR("Failed to create vulkan image.");
+			}
 
-	// Clean up pixel data
-	stbi_image_free(pixels);
+			// Transition the image layout and copy the staging buffers content to the vulkan image
+			transitionImageLayout(m_Handle,
+								  VK_FORMAT_R8G8B8A8_SRGB,
+								  VK_IMAGE_LAYOUT_UNDEFINED,
+								  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			copyBufferToImage(stagingBuffer.m_Handle, config.s_Width, config.s_Height);
 
-	if (!CreateImage(outImage.s_Width,
-		outImage.s_Height,
-		VK_FORMAT_R8G8B8A8_SRGB,
-		VK_IMAGE_TILING_OPTIMAL,
-		VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		outImage.s_Handle,
-		outImage.s_Memory)) {
-		return false;
-	}
-	
-	// Transition the image layout and copy the staging buffers content to the vulkan image
-	TransitionImageLayout(outImage.s_Handle, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	CopyBufferToImage(stagingBuffer, outImage.s_Handle, static_cast<uint32_t>(outImage.s_Width), static_cast<uint32_t>(outImage.s_Height));
+			// Transition the layout again for the shader
+			transitionImageLayout(m_Handle, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-	// Transition the layout again for the shader
-	TransitionImageLayout(outImage.s_Handle, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			if (!createImageView(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT)) {
+				EN_ERROR("Failed to create Image view.");
+			}
 
-	if (!CreateImageView(outImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT)) {
-		EN_ERROR("Failed to create Image view.");
-		return false;
-	}
-
-	if (!CreateTextureSampler(VulkanRenderer::m_VulkanData.s_Sampler)) {
-		EN_ERROR("Failed to create texture image sampler.");
-		return false;
-	}
-
-	// Cleanup
-	vkDestroyBuffer(d->s_Device.s_LogicalDevice, stagingBuffer, d->s_Allocator);
-	vkFreeMemory(d->s_Device.s_LogicalDevice, stagingBufferMemory, d->s_Allocator);
-	return true;
+			if (!createTextureSampler(m_Sampler)) {
+				EN_ERROR("Failed to create texture image sampler.");
+			}
+			// Cleanup (destructor of VulkanBuffer will be called here for staging buffer)
+		}
+	};
 }
 
-bool VulkanImageUtils::CreateImage(uint32_t width,
-	uint32_t height,
-	VkFormat format,
-	VkImageTiling tiling,
-	VkImageUsageFlags usage,
-	VkMemoryPropertyFlags properties,
-	VkImage& image,
-	VkDeviceMemory& imageMemory) {
-
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
+bool VulkanImage::createImage(const VulkanImageConfig& config, int memoryType) {
 	// Create the vulkan image
 	VkImageCreateInfo imageInfo{};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageInfo.imageType = VK_IMAGE_TYPE_2D;
-	imageInfo.extent.width = static_cast<uint32_t>(width);
-	imageInfo.extent.height = static_cast<uint32_t>(height);
+	imageInfo.extent.width = config.s_Width;
+	imageInfo.extent.height = config.s_Height;
 	imageInfo.extent.depth = 1;
 	imageInfo.mipLevels = 1;
 	imageInfo.arrayLayers = 1;
-	imageInfo.format = format;
-	imageInfo.tiling = tiling;
+	imageInfo.format = config.s_Format;
+	imageInfo.tiling = config.s_Tiling;
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	imageInfo.usage = usage;
+	imageInfo.usage = config.s_Usage;
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	imageInfo.flags = 0; // Optional
 
-	VK_CHECK(vkCreateImage(d->s_Device.s_LogicalDevice, &imageInfo, d->s_Allocator, &image));
+	VK_CHECK(vkCreateImage(m_Device.m_LogicalDevice, &imageInfo, &m_Allocator, &m_Handle));
 	VkMemoryRequirements memRequirements;
-	vkGetImageMemoryRequirements(d->s_Device.s_LogicalDevice, image, &memRequirements);
+	vkGetImageMemoryRequirements(m_Device.m_LogicalDevice, m_Handle, &memRequirements);
 
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = VulkanBufferUtils::FindMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	allocInfo.memoryTypeIndex = memoryType;
 
-	if (vkAllocateMemory(d->s_Device.s_LogicalDevice, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
+	if (vkAllocateMemory(m_Device.m_LogicalDevice, &allocInfo, nullptr, &m_Memory) != VK_SUCCESS) {
 		throw std::runtime_error("failed to allocate image memory!");
 	}
 
-	vkBindImageMemory(d->s_Device.s_LogicalDevice, image, imageMemory, 0);
+	vkBindImageMemory(m_Device.m_LogicalDevice, m_Handle, m_Memory, 0);
 	return true;
 }
 
-bool VulkanImageUtils::CreateImageView(VulkanImage& outImage, VkFormat format, VkImageAspectFlags aspectFlags) {
+bool VulkanImage::createImageView(VkFormat format, VkImageAspectFlags aspectFlags) {
 	VkImageViewCreateInfo viewInfo{};
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	viewInfo.image = outImage.s_Handle;
+	viewInfo.image = m_Handle;
 	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 	viewInfo.format = format;
 	viewInfo.subresourceRange.aspectMask = aspectFlags;
@@ -133,14 +123,11 @@ bool VulkanImageUtils::CreateImageView(VulkanImage& outImage, VkFormat format, V
 	viewInfo.subresourceRange.baseArrayLayer = 0;
 	viewInfo.subresourceRange.layerCount = 1;
 
-	VK_CHECK(vkCreateImageView(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice,
-							   &viewInfo,
-							   VulkanRenderer::m_VulkanData.s_Allocator,
-							   &outImage.s_View));
+	VK_CHECK(vkCreateImageView(m_Device.m_LogicalDevice, &viewInfo, &m_Allocator, &m_View));
 	return true;
 }
 
-bool VulkanImageUtils::CreateTextureSampler(VkSampler& outSampler) {
+bool VulkanImage::createTextureSampler(VkSampler& outSampler) {
 	VkSamplerCreateInfo samplerInfo{};
 	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 	samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -153,7 +140,7 @@ bool VulkanImageUtils::CreateTextureSampler(VkSampler& outSampler) {
 
 	// Figure out max anisotropy
 	VkPhysicalDeviceProperties properties{};
-	vkGetPhysicalDeviceProperties(VulkanRenderer::m_VulkanData.s_Device.s_PhysicalDevice, &properties);
+	vkGetPhysicalDeviceProperties(m_Device.m_PhysicalDevice, &properties);
 	samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
 	samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 	samplerInfo.compareEnable = VK_FALSE;
@@ -163,45 +150,25 @@ bool VulkanImageUtils::CreateTextureSampler(VkSampler& outSampler) {
 	samplerInfo.minLod = 0.0f;
 	samplerInfo.maxLod = 0.0f;
 
-	VK_CHECK(vkCreateSampler(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice,
-							 &samplerInfo,
-							 VulkanRenderer::m_VulkanData.s_Allocator,
-							 &outSampler));
+	VK_CHECK(vkCreateSampler(m_Device.m_LogicalDevice, &samplerInfo, &m_Allocator, &outSampler));
 	return true;
 }
 
-bool VulkanImageUtils::CreateDepthResources(VulkanImage& depthImage) {
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
-	VkFormat depthFormat = FindDepthFormat();
-
+bool VulkanImage::createDepthImage(const VulkanImageConfig& config) {
+	VkMemoryRequirements memRequirements;
+	vkGetImageMemoryRequirements(m_Device.m_LogicalDevice, m_Handle, &memRequirements);
 	// Create VkImage
-	if (!CreateImage(d->s_Swapchain.s_Width,
-		d->s_Swapchain.s_Height,
-		depthFormat,
-		VK_IMAGE_TILING_OPTIMAL,
-		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		depthImage.s_Handle,
-		depthImage.s_Memory)) {
+	if (!createImage(config, VulkanBuffer::findMemoryType(m_Device, memRequirements.memoryTypeBits, config.s_Properties))) {
 		EN_ERROR("Failed to create VkImage for depth image.");
 		return false;
 	}
-
-	// Set the correct height and width of the image
-	depthImage.s_Height = d->s_Swapchain.s_Height;
-	depthImage.s_Width = d->s_Swapchain.s_Width;
-
-	// Create VkImageView
-	CreateImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
-
-	TransitionImageLayout(depthImage.s_Handle, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 	return true;
 }
 
-VkFormat VulkanImageUtils::FindSupportedFormat(DArray<VkFormat> candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
+VkFormat VulkanImage::findSupportedFormat(DArray<VkFormat> candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
 	for (unsigned int i = 0; i < candidates.Size(); i++) {
 		VkFormatProperties props;
-		vkGetPhysicalDeviceFormatProperties(VulkanRenderer::m_VulkanData.s_Device.s_PhysicalDevice, candidates[i], &props);
+		vkGetPhysicalDeviceFormatProperties(m_Device.m_PhysicalDevice, candidates[i], &props);
 		if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
 			return candidates[i];
 		}
@@ -213,20 +180,12 @@ VkFormat VulkanImageUtils::FindSupportedFormat(DArray<VkFormat> candidates, VkIm
 	return {};
 }
 
-VkFormat VulkanImageUtils::FindDepthFormat() {
-	DArray<VkFormat> candidates;
-	candidates.PushBack(VK_FORMAT_D32_SFLOAT);
-	candidates.PushBack(VK_FORMAT_D32_SFLOAT_S8_UINT);
-	candidates.PushBack(VK_FORMAT_D24_UNORM_S8_UINT);
-	return FindSupportedFormat(
-		candidates,
-		VK_IMAGE_TILING_OPTIMAL,
-		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
-	);
-}
-
-void VulkanImageUtils::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
-	VkCommandBuffer commandBuffer = VulkanCommandbufferUtils::BeginSingleUseCommands();
+void VulkanImage::transitionImageLayout(VkImage image,
+										VkFormat format,
+										VkImageLayout oldLayout,
+										VkImageLayout newLayout) {
+	VulkanCommandbuffer commandBuffer(m_Device, m_Device.m_CommandPool);
+	commandBuffer.beginSingleUseCommands();
 
 	VkImageMemoryBarrier barrier{};
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -265,7 +224,7 @@ void VulkanImageUtils::TransitionImageLayout(VkImage image, VkFormat format, VkI
 		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 		destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 
-		if (HasStencilComponent(format)) {
+		if (hasStencilComponent(format)) {
 			barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 		}
 		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
@@ -279,7 +238,7 @@ void VulkanImageUtils::TransitionImageLayout(VkImage image, VkFormat format, VkI
 	}
 
 	vkCmdPipelineBarrier(
-		commandBuffer,
+		commandBuffer.m_Handle,
 		sourceStage, destinationStage,
 		0,
 		0, nullptr,
@@ -287,11 +246,14 @@ void VulkanImageUtils::TransitionImageLayout(VkImage image, VkFormat format, VkI
 		1, &barrier
 	);
 
-	VulkanCommandbufferUtils::EndSingleUseCommands(commandBuffer);
+	commandBuffer.endSingleUseCommands(m_Device.m_GraphicsQueue);
 }
 
-void VulkanImageUtils::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) {
-	VkCommandBuffer commandBuffer = VulkanCommandbufferUtils::BeginSingleUseCommands();
+void VulkanImage::copyBufferToImage(VkBuffer buffer,
+									uint32_t width,
+									uint32_t height) {
+	VulkanCommandbuffer commandBuffer(m_Device, m_Device.m_CommandPool);
+	commandBuffer.beginSingleUseCommands();
 
 	VkBufferImageCopy region{};
 	region.bufferOffset = 0;
@@ -311,21 +273,21 @@ void VulkanImageUtils::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_
 	};
 
 	vkCmdCopyBufferToImage(
-		commandBuffer,
+		commandBuffer.m_Handle,
 		buffer,
-		image,
+		m_Handle,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		1,
 		&region
 	);
-
-	VulkanCommandbufferUtils::EndSingleUseCommands(commandBuffer);
+	commandBuffer.endSingleUseCommands(m_Device.m_GraphicsQueue);
 }
 
-void VulkanImageUtils::Destroy(VulkanImage& image) {
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
-
-	vkDestroyImageView(d->s_Device.s_LogicalDevice, image.s_View,d->s_Allocator);
-	vkDestroyImage(d->s_Device.s_LogicalDevice, image.s_Handle, d->s_Allocator);
-	vkFreeMemory(d->s_Device.s_LogicalDevice, image.s_Memory, d->s_Allocator);
-} 
+VulkanImage::~VulkanImage() {
+	if (m_Sampler != NULL) {
+		vkDestroySampler(m_Device.m_LogicalDevice, m_Sampler, &m_Allocator);
+	}
+	vkDestroyImageView(m_Device.m_LogicalDevice, m_View, &m_Allocator);
+	vkDestroyImage(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
+	vkFreeMemory(m_Device.m_LogicalDevice, m_Memory, &m_Allocator);
+}

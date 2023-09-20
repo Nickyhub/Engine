@@ -7,46 +7,91 @@
 #include <chrono>
 
 #include "VulkanBuffer.hpp"
+#include "VulkanCommandbuffer.hpp"
+#include "VulkanUtils.hpp"
 #include "containers/Array.hpp"
-#include "VulkanRenderer.hpp"
 #include "core/Random.hpp"
 
-bool VulkanBufferUtils::CreateBuffer(VkDeviceSize size, VkBufferUsageFlagBits usage, VkMemoryPropertyFlags memoryProperties, VkDeviceMemory &bufferMemory, VkBuffer& buffer) {
+VulkanBuffer::VulkanBuffer(const VulkanDevice& device,
+	VkDeviceSize size,
+	VkBufferUsageFlagBits usage,
+	VkMemoryPropertyFlags memPropertyFlags,
+	const VkAllocationCallbacks& allocator)
+	: m_Device(device), m_Allocator(allocator), m_Size(size) {
 	VkBufferCreateInfo bufferInfo{};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferInfo.size = size;
 	bufferInfo.usage = usage;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-	VK_CHECK(vkCreateBuffer(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, &bufferInfo, VulkanRenderer::m_VulkanData.s_Allocator, &buffer));
+	VK_CHECK(vkCreateBuffer(m_Device.m_LogicalDevice,
+		&bufferInfo,
+		&m_Allocator,
+		&m_Handle));
 
 	// Buffer is created but it needs actual memory associated with it
 	VkMemoryRequirements memReq;
-	vkGetBufferMemoryRequirements(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, buffer, &memReq);
+	vkGetBufferMemoryRequirements(m_Device.m_LogicalDevice, m_Handle, &memReq);
 
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memReq.size;
-	allocInfo.memoryTypeIndex = VulkanBufferUtils::FindMemoryType(memReq.memoryTypeBits, memoryProperties);
-
+	allocInfo.memoryTypeIndex = findMemoryType(m_Device, memReq.memoryTypeBits, memPropertyFlags);
 
 	// Allocate and bind the buffer memory
-	VK_CHECK(vkAllocateMemory(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, &allocInfo, VulkanRenderer::m_VulkanData.s_Allocator, &bufferMemory));
-	vkBindBufferMemory(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, buffer, bufferMemory, 0);
+	VK_CHECK(vkAllocateMemory(m_Device.m_LogicalDevice,
+		&allocInfo,
+		&m_Allocator,
+		&m_Memory));
+	vkBindBufferMemory(m_Device.m_LogicalDevice,
+		m_Handle,
+		m_Memory,
+		0);
+}
 
+bool VulkanBuffer::copyBuffer(VkBuffer dstBuffer, VkDeviceSize size, VkCommandPool pool, VkQueue queue) {
+	VulkanCommandbuffer commandBuffer(m_Device, pool);
+	commandBuffer.beginSingleUseCommands();
+
+	VkBufferCopy copyRegion{};
+	copyRegion.size = size;
+	vkCmdCopyBuffer(commandBuffer.m_Handle, m_Handle, dstBuffer, 1, &copyRegion);
+
+	commandBuffer.endSingleUseCommands(queue);
 	return true;
 }
 
-bool VulkanBufferUtils::CreateVertexBuffer(VertexBuffer& vertexBuffer) {
-	if (vertexBuffer.s_Vertices.Size() == 0) {
+int VulkanBuffer::findMemoryType(const VulkanDevice& device, unsigned int typeFilter, VkMemoryPropertyFlags properties) {
+	// Find the proper memory type
+	VkPhysicalDeviceMemoryProperties memProps;
+	vkGetPhysicalDeviceMemoryProperties(device.m_PhysicalDevice, &memProps);
+	for (unsigned int i = 0; i < memProps.memoryTypeCount; i++) {
+		if ((typeFilter & (1 << i)) && (memProps.memoryTypes[i].propertyFlags & (properties))) {
+			return i;
+		}
+	}
+	return 0;
+}
+
+VulkanBuffer::~VulkanBuffer() {
+	vkDestroyBuffer(m_Device.m_LogicalDevice,
+		m_Handle,
+		&m_Allocator);
+	vkFreeMemory(m_Device.m_LogicalDevice,
+		m_Memory,
+		&m_Allocator);
+}
+
+VertexBuffer::VertexBuffer(DArray<Vertex>* vertices,
+	const VulkanDevice& device,
+	const VkAllocationCallbacks& allocator)
+	: m_Device(device), m_Allocator(allocator), m_Vertices(vertices) {
+	if (vertices->Size() == 0) {
 		EN_WARN("CreateVertexBuffer was called with an empty set of vertices. Nothing happens.");
-		return false;
 	}
 
 	// First calculate and set the buffer size.
-	vertexBuffer.s_Size = vertexBuffer.s_Vertices.Size() * sizeof(vertexBuffer.s_Vertices[0]);
-
-
+	unsigned int bufferSize = m_Vertices->Size() * sizeof(m_Vertices[0]);
 	VkVertexInputBindingDescription bindingDescription{};
 	bindingDescription.binding = 0;
 	bindingDescription.stride = sizeof(Vertex);
@@ -72,119 +117,158 @@ bool VulkanBufferUtils::CreateVertexBuffer(VertexBuffer& vertexBuffer) {
 	attributeDescriptions[2].offset = offsetof(Vertex, s_TexCoord);
 
 	// Copy the produced data to the buffer
-	vertexBuffer.s_AttributeDescriptions.PushBack(attributeDescriptions[0]);
-	vertexBuffer.s_AttributeDescriptions.PushBack(attributeDescriptions[1]);
-	vertexBuffer.s_AttributeDescriptions.PushBack(attributeDescriptions[2]);
+	m_AttributeDescriptions.PushBack(attributeDescriptions[0]);
+	m_AttributeDescriptions.PushBack(attributeDescriptions[1]);
+	m_AttributeDescriptions.PushBack(attributeDescriptions[2]);
 
-	vertexBuffer.s_BindingDescription = bindingDescription;
+	m_BindingDescription = bindingDescription;
 
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingBufferMemory;
-
-	if (!CreateBuffer(
-		vertexBuffer.s_Size,
+	VulkanBuffer stagingBuffer(m_Device,
+		bufferSize,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		stagingBufferMemory,
-		stagingBuffer)) {
-		EN_ERROR("Failed to create staging buffer while calling CreateVertexBuffer.");
-		return false;
-	}
+		m_Allocator);
 
 	// Map the memory of the geometry data to the staging buffers memory
 	void* data;
-	vkMapMemory(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, stagingBufferMemory, 0, vertexBuffer.s_Size, 0, &data);
-	memcpy(data, vertexBuffer.s_Vertices.GetData(), (size_t)vertexBuffer.s_Size);
-	vkUnmapMemory(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, stagingBufferMemory);
-	
-	if (!CreateBuffer(
-		vertexBuffer.s_Size,
+	vkMapMemory(m_Device.m_LogicalDevice,
+		stagingBuffer.m_Memory,
+		0,
+		bufferSize,
+		0,
+		&data);
+	memcpy(data, m_Vertices->GetData(), (size_t)bufferSize);
+	vkUnmapMemory(m_Device.m_LogicalDevice, stagingBuffer.m_Memory);
+
+	m_InternalBuffer = new VulkanBuffer(m_Device,
+		bufferSize,
 		(VkBufferUsageFlagBits)(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT),
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		vertexBuffer.s_Memory, vertexBuffer.s_Handle)) {
-		EN_ERROR("Failed to create device local vertex buffer.");
-		return false;
-	}
+		m_Allocator);
 
-	CopyBuffer(stagingBuffer, vertexBuffer.s_Handle, vertexBuffer.s_Size);
 
-	// Clean up staging buffer
-	vkDestroyBuffer(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, stagingBuffer, VulkanRenderer::m_VulkanData.s_Allocator);
-	vkFreeMemory(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, stagingBufferMemory, VulkanRenderer::m_VulkanData.s_Allocator);
-	return true;
+	stagingBuffer.copyBuffer(m_InternalBuffer->m_Handle,
+							 bufferSize,
+							 m_Device.m_CommandPool,
+							 m_Device.m_GraphicsQueue);
+	// Staging buffer will be automatically destroyed when destructor is called at the
+	// end of this method
 }
 
-bool VulkanBufferUtils::CreateIndexBuffer(IndexBuffer& indexBuffer) {
-	if (indexBuffer.s_Indices.Size() == 0) {
+DArray<Vertex>* VertexBuffer::generatePlaneData(unsigned int width, unsigned int height, unsigned int fieldWidth, unsigned int fieldHeight) {
+	/*for (unsigned int i = 0; i < height; i++) {
+		for (unsigned int j = 0; j < width; j++) {
+			glm::vec3 v = { i* fieldWidth, j* fieldHeight, Random::GetRandomNumberInWholeRange(-1, 1) };
+			glm::vec4 c = { Random::GetNormalizedFloat(), Random::GetNormalizedFloat() + 4, Random::GetNormalizedFloat(), 1.0f};
+			outBuffer->s_Vertices.PushBack({ v,c });
+		}
+	}*/
+	DArray<Vertex>* vertices = new DArray<Vertex>();
+	vertices->PushBack({ {-0.5f, -0.5f, 0.0f}, { 1.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 0.0f} });
+	vertices->PushBack({ {0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} });
+	vertices->PushBack({ {0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 1.0f} });
+	vertices->PushBack({ {-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f} });
+
+	vertices->PushBack({ {-0.5f, -0.5f, 1.0f}, { 1.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 0.0f} });
+	vertices->PushBack({ {0.5f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} });
+	vertices->PushBack({ {0.5f, 0.5f, 1.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 1.0f} });
+	vertices->PushBack({ {-0.5f, 0.5f, 1.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f} });
+	return vertices;
+}
+
+VertexBuffer::~VertexBuffer() {
+	delete m_InternalBuffer;
+	delete m_Vertices;
+}
+
+
+IndexBuffer::IndexBuffer(DArray<unsigned int>* indices,
+	const VulkanDevice& device,
+	const VkAllocationCallbacks& allocator)
+	: m_Indices(indices), m_Device(device), m_Allocator(allocator) {
+	if (m_Indices->Size() == 0) {
 		EN_WARN("CreateIndexBuffer was called with an empty set of vertices. Nothing happens.");
-		return false;
 	}
 	// Calculate and set index buffer size
-	indexBuffer.s_Size = sizeof(unsigned int) * indexBuffer.s_Indices.Size();
+	unsigned int bufferSize = sizeof(unsigned int) * m_Indices->Size();
 
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingBufferMemory;
-	if (!CreateBuffer(indexBuffer.s_Size,
+	VulkanBuffer stagingBuffer(m_Device,
+		bufferSize,
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		stagingBufferMemory, 
-		stagingBuffer)) {
-		EN_ERROR("Failed to create index staging buffer.");
-		return false;
-	}
+		m_Allocator);
 
 	void* data;
-	vkMapMemory(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, stagingBufferMemory, 0, indexBuffer.s_Size, 0, &data);
-	memcpy(data, indexBuffer.s_Indices.GetData(), (size_t)indexBuffer.s_Size);
-	vkUnmapMemory(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, stagingBufferMemory);
+	vkMapMemory(m_Device.m_LogicalDevice,
+		stagingBuffer.m_Memory,
+		0,
+		bufferSize,
+		0,
+		&data);
+	memcpy(data, m_Indices->GetData(), (size_t)bufferSize);
+	vkUnmapMemory(m_Device.m_LogicalDevice,
+		stagingBuffer.m_Memory);
 
-	if (!CreateBuffer(indexBuffer.s_Size,
+	m_InternalBuffer = new VulkanBuffer(m_Device,
+		bufferSize,
 		(VkBufferUsageFlagBits)(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT),
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		indexBuffer.s_Memory,
-		indexBuffer.s_Handle)) {
-		EN_ERROR("Failed to create device local index buffer.");
-		return false;
-	}
+		m_Allocator);
 
-	CopyBuffer(stagingBuffer, indexBuffer.s_Handle, indexBuffer.s_Size);
-
-	// Clean up staging buffer
-	vkDestroyBuffer(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, stagingBuffer, VulkanRenderer::m_VulkanData.s_Allocator);
-	vkFreeMemory(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, stagingBufferMemory, VulkanRenderer::m_VulkanData.s_Allocator);
-	return true;
+	stagingBuffer.copyBuffer(m_InternalBuffer->m_Handle,
+							 bufferSize,
+							 m_Device.m_CommandPool,
+							 m_Device.m_GraphicsQueue);
+	// Clean up staging buffer(destructor will be called since its stack allocated)
 }
 
-bool VulkanBufferUtils::CreateUniformBuffer(UniformBuffer& buffer) {
+DArray<unsigned int>* IndexBuffer::generateExampleIndices() {
+	DArray<unsigned int>* indices = new DArray<unsigned int>();
+	indices->PushBack(0);
+	indices->PushBack(1);
+	indices->PushBack(2);
+	indices->PushBack(2);
+	indices->PushBack(3);
+	indices->PushBack(0);
+
+	indices->PushBack(4);
+	indices->PushBack(5);
+	indices->PushBack(6);
+	indices->PushBack(6);
+	indices->PushBack(7);
+	indices->PushBack(4);
+
+	return indices;
+}
+
+IndexBuffer::~IndexBuffer() {
+	delete m_InternalBuffer;
+	delete m_Indices;
+}
+
+UniformBuffer::UniformBuffer(unsigned int framesInFlight, const VulkanDevice& device, const VkAllocationCallbacks& allocator)
+	: m_Device(device), m_Allocator(allocator) {
 	VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-	int framesInFlight = VulkanRenderer::m_VulkanData.s_FramesInFlight;
 
-	buffer.s_UniformBuffers.Resize(framesInFlight);
-	buffer.s_UniformBuffersMemory.Resize(framesInFlight);
-	buffer.s_UniformBuffersMapped.Resize(framesInFlight);
+	m_Buffers.Resize(framesInFlight);
+	m_UniformBuffersMapped.Resize(framesInFlight);
 
-	for (int i = 0; i < framesInFlight; i++) {
-		CreateBuffer(
+	for (unsigned int i = 0; i < framesInFlight; i++) {
+		m_Buffers[i] = new VulkanBuffer(device,
 			bufferSize,
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			buffer.s_UniformBuffersMemory[i],
-			buffer.s_UniformBuffers[i]);
-		vkMapMemory(
-			VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice,
-			buffer.s_UniformBuffersMemory[i],
-			0,
-			bufferSize,
-			0,
-			&buffer.s_UniformBuffersMapped[i]);
+			m_Allocator);
 	}
-
-	return true;
 }
 
-void VulkanBufferUtils::UpdateUniformBuffer(UniformBuffer& buffer) {
-	VulkanData* d = &VulkanRenderer::m_VulkanData;
+UniformBuffer::~UniformBuffer() {
+	for (unsigned int i = 0; i < m_Buffers.Size(); i++) {
+		delete m_Buffers[i];
+	}
+}
 
+void UniformBuffer::update(unsigned int width, unsigned int height, unsigned int currentFrame) {
 	static auto startTime = std::chrono::high_resolution_clock::now();
 
 	auto currentTime = std::chrono::high_resolution_clock::now();
@@ -195,76 +279,11 @@ void VulkanBufferUtils::UpdateUniformBuffer(UniformBuffer& buffer) {
 	ubo.s_View = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 	ubo.s_Proj = glm::perspective(
 		glm::radians(45.0f),
-		d->s_Swapchain.s_Width / (float)d->s_Swapchain.s_Height,
+		(float)width / height,
 		0.1f,
 		10.0f);
-	ubo.s_Proj[1][1] *=-1;
+	ubo.s_Proj[1][1] *= -1;
 
-	Memory::Copy(buffer.s_UniformBuffersMapped[d->s_CurrentFrame], &ubo, sizeof(ubo));
-
+	Memory::Copy(m_UniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }
 
-bool VulkanBufferUtils::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-	VkCommandBuffer commandBuffer = VulkanCommandbufferUtils::BeginSingleUseCommands();
-
-	VkBufferCopy copyRegion{};
-	copyRegion.size = size;
-	vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-	VulkanCommandbufferUtils::EndSingleUseCommands(commandBuffer);
-	return true;
-}
-
-unsigned int VulkanBufferUtils::FindMemoryType(unsigned int typeFilter, VkMemoryPropertyFlags properties) {
-	// Find the proper memory type
-	VkPhysicalDeviceMemoryProperties memProps;
-	vkGetPhysicalDeviceMemoryProperties(VulkanRenderer::m_VulkanData.s_Device.s_PhysicalDevice, &memProps);
-	for (unsigned int i = 0; i < memProps.memoryTypeCount; i++) {
-		if ((typeFilter & (1 << i)) && (memProps.memoryTypes[i].propertyFlags & (properties))) {
-			return i;
-		}
-	}
-	return 0;
-}
-
-void VulkanBufferUtils::Destroy(VulkanBuffer* buffer) {
-	vkDestroyBuffer(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, buffer->s_Handle, VulkanRenderer::m_VulkanData.s_Allocator);
-	vkFreeMemory(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, buffer->s_Memory, VulkanRenderer::m_VulkanData.s_Allocator);
-}
-
-bool VulkanBufferUtils::GeneratePlaneData(VertexBuffer* outVertexBuffer, IndexBuffer* outIndexBuffer, unsigned int width, unsigned int height, unsigned int fieldWidth, unsigned int fieldHeight) {
-
-	/*for (unsigned int i = 0; i < height; i++) {
-		for (unsigned int j = 0; j < width; j++) {
-			glm::vec3 v = { i* fieldWidth, j* fieldHeight, Random::GetRandomNumberInWholeRange(-1, 1) };
-			glm::vec4 c = { Random::GetNormalizedFloat(), Random::GetNormalizedFloat() + 4, Random::GetNormalizedFloat(), 1.0f};
-			outBuffer->s_Vertices.PushBack({ v,c });
-		}
-	}*/
-
-	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, -0.5f, 0.0f}, { 1.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 0.0f} });
-	outVertexBuffer->s_Vertices.PushBack({ {0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} });
-	outVertexBuffer->s_Vertices.PushBack({ {0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 1.0f} });
-	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f} });
-
-	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, -0.5f, 1.0f}, { 1.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 0.0f} });
-	outVertexBuffer->s_Vertices.PushBack({ {0.5f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} });
-	outVertexBuffer->s_Vertices.PushBack({ {0.5f, 0.5f, 1.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 1.0f} });
-	outVertexBuffer->s_Vertices.PushBack({ {-0.5f, 0.5f, 1.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f} });
-
-	outIndexBuffer->s_Indices.PushBack(0);
-	outIndexBuffer->s_Indices.PushBack(1);
-	outIndexBuffer->s_Indices.PushBack(2);
-	outIndexBuffer->s_Indices.PushBack(2);
-	outIndexBuffer->s_Indices.PushBack(3);
-	outIndexBuffer->s_Indices.PushBack(0);
-
-	outIndexBuffer->s_Indices.PushBack(4);
-	outIndexBuffer->s_Indices.PushBack(5);
-	outIndexBuffer->s_Indices.PushBack(6);
-	outIndexBuffer->s_Indices.PushBack(6);
-	outIndexBuffer->s_Indices.PushBack(7);
-	outIndexBuffer->s_Indices.PushBack(4);
-
-	return true;
-}

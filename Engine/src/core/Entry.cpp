@@ -5,14 +5,11 @@
 
 int main() {
 	ApplicationConfig config{};
-	config.Width = 1920;
-	config.Height = 1080;
-	config.Name = "Engine";
+	config.s_Width = 1920;
+	config.s_Height = 1080;
+	config.s_Name = "Engine";
 	config.TargetTicksPerSecond = 60;
 
-	if (!Application::Initialize(&config)) {
-		return 1;
-	}
-	Application::Run();
-	Application::Shutdown();
-}
+	Application app(config);
+	app.run();
+} 

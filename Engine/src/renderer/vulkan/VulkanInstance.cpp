@@ -1,12 +1,10 @@
 #include "VulkanInstance.hpp"
-#include "VulkanRenderer.hpp"
+#include "VulkanUtils.hpp"
 #include "Defines.hpp"
 
-#include "core/Application.hpp"
 #include "core/Logger.hpp"
 #include "core/Platform.hpp"
 #include "core/String.hpp"
-
 #include "containers/DArray.hpp"
 
 // Callback for the Debug Messenger for validation layer errors
@@ -30,21 +28,30 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 }
 
 void VulkanInstanceConfig::populateWithDefaultValues() {
-	extensions.emplace_back(Platform::GetVulkanExtensions());
-	extensions.emplace_back(VK_KHR_SURFACE_EXTENSION_NAME);
-	extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+	s_Extensions.emplace_back(Platform::getVulkanExtensions());
+	s_Extensions.emplace_back(VK_KHR_SURFACE_EXTENSION_NAME);
+	s_Extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
-	validationLayers.emplace_back("VK_LAYER_KHRONOS_validation");
+	s_ValidationLayers.emplace_back("VK_LAYER_KHRONOS_validation");
 }
 
-VulkanInstance::VulkanInstance(VulkanInstanceConfig& instanceConfig) {
-// Get Application data
-	ApplicationConfig aConfig = Application::GetConfig();
+VulkanInstance::VulkanInstance() {
+	VulkanInstanceConfig config{};
+	config.populateWithDefaultValues();
+	create(config);
+}
+
+VulkanInstance::VulkanInstance(const VulkanInstanceConfig& instanceConfig) {
+	create(instanceConfig);
+}
+
+void VulkanInstance::create(const VulkanInstanceConfig& instanceConfig) {
+	// Get Application data
 	VkApplicationInfo appInfo{};
 	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	appInfo.pApplicationName = aConfig.Name;
+	appInfo.pApplicationName = instanceConfig.s_Name;
 	appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-	appInfo.pEngineName = aConfig.Name;
+	appInfo.pEngineName = instanceConfig.s_Name;
 	appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 	appInfo.apiVersion = VK_API_VERSION_1_0;
 
@@ -59,24 +66,23 @@ VulkanInstance::VulkanInstance(VulkanInstanceConfig& instanceConfig) {
 	DArray<VkExtensionProperties> availableExtensions;
 	availableExtensions.Resize(extensionCount);
 	vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, availableExtensions.GetData());
-	
+
 	EN_INFO("Available extensions:");
 	for (unsigned int i = 0; i < extensionCount; i++) {
 		EN_INFO(availableExtensions[i].extensionName);
 	}
 
-
 	EN_DEBUG("Required extensions: ");
 	// Output required extension
-	for (unsigned int i = 0; i < instanceConfig.extensions.size(); i++) {
-		EN_DEBUG(instanceConfig.extensions[i]);
+	for (unsigned int i = 0; i < instanceConfig.s_Extensions.size(); i++) {
+		EN_DEBUG(instanceConfig.s_Extensions[i]);
 	}
 
-	createInfo.enabledExtensionCount = instanceConfig.extensions.size();
-	createInfo.ppEnabledExtensionNames = &instanceConfig.extensions[0];
+	createInfo.enabledExtensionCount = (uint32_t)instanceConfig.s_Extensions.size();
+	createInfo.ppEnabledExtensionNames = &instanceConfig.s_Extensions[0];
 	createInfo.enabledLayerCount = 0;
 
-// Enable validation layer support in debug mode
+	// Enable validation layer support in debug mode
 #ifdef _DEBUG
 	// Get available validation layers
 	DArray<VkLayerProperties> availableValidationLayers;
@@ -88,8 +94,8 @@ VulkanInstance::VulkanInstance(VulkanInstanceConfig& instanceConfig) {
 	// Check if the required layers are available
 	bool found = false;
 	for (unsigned int i = 0; i < validationLayerCount; i++) {
-		for (unsigned int j = 0; j < instanceConfig.validationLayers.size(); j++) {
-			if (String::StringCompare(availableValidationLayers[i].layerName, instanceConfig.validationLayers[j])) {
+		for (unsigned int j = 0; j < instanceConfig.s_ValidationLayers.size(); j++) {
+			if (String::StringCompare(availableValidationLayers[i].layerName, instanceConfig.s_ValidationLayers[j])) {
 				found = true;
 			}
 		}
@@ -97,23 +103,23 @@ VulkanInstance::VulkanInstance(VulkanInstanceConfig& instanceConfig) {
 
 	// If all have been found add them to the vkInstanceCreateInfo
 	if (found) {
-		createInfo.enabledLayerCount = instanceConfig.validationLayers.size();
-		createInfo.ppEnabledLayerNames = instanceConfig.validationLayers.data();
+		createInfo.enabledLayerCount = (uint32_t)instanceConfig.s_ValidationLayers.size();
+		createInfo.ppEnabledLayerNames = instanceConfig.s_ValidationLayers.data();
 	}
 
 #endif
-	VK_CHECK(vkCreateInstance(&createInfo, VulkanRenderer::m_VulkanData.s_Allocator, &this->m_Handle));
+	VK_CHECK(vkCreateInstance(&createInfo, &m_Allocator, &this->m_Handle));
 #ifdef _DEBUG
 	// Can only create Debug Messenger after Instance has already been created
-	createDebugMessenger(&this->m_Handle, &VulkanRenderer::m_VulkanData.s_DebugMessenger);
+	createDebugMessenger(&this->m_Handle, &m_DebugMessenger);
 #endif
 	EN_DEBUG("Vulkan instance created!");
 }
 
 VulkanInstance::~VulkanInstance() {
-EN_DEBUG("Destroying Vulkan Instance.");
+	EN_DEBUG("Destroying Vulkan Instance.");
 	if (this->m_Handle) {
-		vkDestroyInstance(this->m_Handle, VulkanRenderer::m_VulkanData.s_Allocator);
+		vkDestroyInstance(this->m_Handle, &m_Allocator);
 	}
 }
 
@@ -126,7 +132,7 @@ bool VulkanInstance::createDebugMessenger(VkInstance* instance, VkDebugUtilsMess
 	createInfo.pfnUserCallback = debugCallback;
 
 	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(*instance, "vkCreateDebugUtilsMessengerEXT");
-	VkResult result = func(*instance, &createInfo, VulkanRenderer::m_VulkanData.s_Allocator, debugMessenger);
+	VkResult result = func(*instance, &createInfo, &m_Allocator, debugMessenger);
 	if (result != VK_SUCCESS) {
 		EN_ERROR("Failed to create Debug Messenger.");
 		return false;

@@ -1,40 +1,38 @@
 #include "VulkanCommandbuffer.hpp"
-#include "VulkanRenderer.hpp"
 #include "VulkanUtils.hpp"
 
-bool VulkanCommandbufferUtils::Create(VulkanCommandbuffer* outCommandbuffer) {
+VulkanCommandbuffer::VulkanCommandbuffer(const VulkanDevice& device, const VkCommandPool& pool) 
+	: m_Device(device), m_Pool(pool) {
 	VkCommandBufferAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.commandPool = VulkanRenderer::m_VulkanData.s_Device.s_CommandPool;
+	allocInfo.commandPool = pool;
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocInfo.commandBufferCount = 1;
 
-	VK_CHECK(vkAllocateCommandBuffers(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, &allocInfo, &outCommandbuffer->s_Handle));
-
-	return true;
+	VK_CHECK(vkAllocateCommandBuffers(m_Device.m_LogicalDevice,
+									  &allocInfo,
+									  &m_Handle));
 }
 
-bool VulkanCommandbufferUtils::Record(VulkanCommandbuffer* outCommandbuffer, unsigned int imageIndex) {
+bool VulkanCommandbuffer::record() {
 	VkCommandBufferBeginInfo beginInfo{};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	beginInfo.flags = 0;
 	beginInfo.pInheritanceInfo = nullptr;
 
-	VK_CHECK(vkBeginCommandBuffer(outCommandbuffer->s_Handle, &beginInfo));
-
-
+	VK_CHECK(vkBeginCommandBuffer(m_Handle, &beginInfo));
 	return true;
 }
 
-VkCommandBuffer VulkanCommandbufferUtils::BeginSingleUseCommands() {
+VkCommandBuffer VulkanCommandbuffer::beginSingleUseCommands() {
 	VkCommandBufferAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandPool = VulkanRenderer::m_VulkanData.s_Device.s_CommandPool;
+	allocInfo.commandPool = m_Pool;
 	allocInfo.commandBufferCount = 1;
 
 	VkCommandBuffer commandBuffer;
-	vkAllocateCommandBuffers(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, &allocInfo, &commandBuffer);
+	vkAllocateCommandBuffers(m_Device.m_LogicalDevice, &allocInfo, &commandBuffer);
 
 	VkCommandBufferBeginInfo beginInfo{};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -45,22 +43,28 @@ VkCommandBuffer VulkanCommandbufferUtils::BeginSingleUseCommands() {
 	return commandBuffer;
 }
 
-void VulkanCommandbufferUtils::EndSingleUseCommands(VkCommandBuffer commandBuffer) {
-	vkEndCommandBuffer(commandBuffer);
+void VulkanCommandbuffer::endSingleUseCommands(VkQueue queue) {
+	vkEndCommandBuffer(m_Handle);
 
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffer;
+	submitInfo.pCommandBuffers = &m_Handle;
 
-	vkQueueSubmit(VulkanRenderer::m_VulkanData.s_Device.s_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-	vkQueueWaitIdle(VulkanRenderer::m_VulkanData.s_Device.s_GraphicsQueue);
+	vkQueueSubmit(queue,
+				  1,
+				  &submitInfo,
+				  VK_NULL_HANDLE);
+	vkQueueWaitIdle(queue);
 
-	vkFreeCommandBuffers(VulkanRenderer::m_VulkanData.s_Device.s_LogicalDevice, VulkanRenderer::m_VulkanData.s_Device.s_CommandPool, 1, &commandBuffer);
+	vkFreeCommandBuffers(m_Device.m_LogicalDevice,
+						 m_Pool,
+						 1,
+						 &m_Handle);
 }
 
-bool VulkanCommandbufferUtils::End(VulkanCommandbuffer* commandBuffer) {
+bool VulkanCommandbuffer::end() {
 	//commandBuffer->s_State = 0;
-	VK_CHECK(vkEndCommandBuffer(commandBuffer->s_Handle));
+	VK_CHECK(vkEndCommandBuffer(m_Handle));
 	return true;
 }

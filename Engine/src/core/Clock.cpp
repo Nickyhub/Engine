@@ -2,17 +2,17 @@
 #include "Platform.hpp"
 
 void Clock::Start() {
-	m_StartTime = Platform::GetAbsoluteTime();
+	m_StartTime = Platform::getAbsoluteTime();
 }
 
 double Clock::GetElapsed() {
-	double currentTime = Platform::GetAbsoluteTime();
+	double currentTime = Platform::getAbsoluteTime();
 	m_Elapsed = currentTime - m_StartTime;
 	return m_Elapsed;
 }
 
 void Clock::Update() {
-	m_Elapsed = Platform::GetAbsoluteTime() - m_StartTime;
+	m_Elapsed = Platform::getAbsoluteTime() - m_StartTime;
 }
 
 double Clock::GetWaitTimeTargetTicks(long ticksPerSecond) {

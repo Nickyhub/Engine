@@ -1,3 +1,4 @@
+#include "VulkanUtils.hpp"
 #include "VulkanRenderer.hpp"
 #include "VulkanInstance.hpp"
 #include "VulkanDevice.hpp"
@@ -5,183 +6,154 @@
 #include "VulkanRenderpass.hpp"
 #include "VulkanFramebuffer.hpp"
 #include "VulkanCommandbuffer.hpp"
-#include "VulkanSyncObjects.hpp"
 #include "VulkanBuffer.hpp"
 
 #include "core/Platform.hpp"
 #include "core/Application.hpp"
 
-VulkanData VulkanRenderer::m_VulkanData;
-
-bool VulkanRenderer::Initialize() {
+VulkanRenderer::VulkanRenderer(unsigned int width, unsigned int height) :
+	m_Instance(),
+	m_Device(m_Instance, VK_TRUE, VK_TRUE),
+	m_Swapchain({width, height, m_Device, m_Instance.m_Allocator}),
+	m_VulkanImage({width,
+					height,
+					VK_FORMAT_R8G8B8A8_SRGB,
+					VK_IMAGE_TILING_OPTIMAL,
+					VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+					m_Device,
+					m_Instance.m_Allocator}),
+	m_DepthImage({ width,
+				height,
+				m_Device.findDepthFormat(),
+				VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				m_Device,
+				m_Instance.m_Allocator }),
+	m_VertexBuffer(VertexBuffer::generatePlaneData(10, 10, 2, 2),
+		m_Device,
+		m_Instance.m_Allocator),
+	m_Pipeline({ width,
+				 height,
+				 m_FramesInFlight,
+				 m_Swapchain.m_SurfaceFormat.format,
+				 m_VertexBuffer,
+				 m_Device,
+				 m_Instance.m_Allocator	}),
+	m_IndexBuffer(IndexBuffer::generateExampleIndices(), m_Device, m_Instance.m_Allocator),
+	m_UniformBuffer(m_FramesInFlight, m_Device, m_Instance.m_Allocator) {
 	EN_DEBUG("Intializing Vulkan Renderer...");
 
-	// Create vulkan objects in certain order
-	VulkanInstanceConfig instanceConfig;
-	instanceConfig.populateWithDefaultValues();
-	if (m_VulkanData.s_Instance) {
-		EN_ERROR("Renderer failed to create Vulkan Instance. Shutting down.");
-		return false;
-	}
-
-	// Create surface
-	if (!Platform::CreateVulkanSurface(m_VulkanData)) {
-		EN_ERROR("Failed to create vulkan surface. Shutting down.");
-		return false;
-	}
-
-	// Create device (logical and physical)
-	if (!VulkanDeviceUtils::Create(&m_VulkanData.s_Device)) {
-		EN_ERROR("Failed to create vulkan device. Shutting down.");
-		return false;
-	}
-
-	// Create swapchain 
-	if (!VulkanSwapchainUtils::Create(&m_VulkanData.s_Swapchain, Application::GetConfig().Width, Application::GetConfig().Height)) {
-		EN_ERROR("Failed to create vulkan swapchain. Shutting down.");
-		return false;
-	}
-
-	// Create the Renderpass
-	if (!VulkanRenderpassUtils::Create(&m_VulkanData.s_Pipeline.s_Renderpass)) {
-		EN_ERROR("Failed to create vulkan renderpass. Shutting down.");
-		return false;
-	}
-
 	// Create Framebuffers
-	m_VulkanData.s_Swapchain.s_Framebuffers.Resize(VulkanRenderer::m_VulkanData.s_Swapchain.s_ImageCount);
-	for (unsigned int i = 0; i < VulkanRenderer::m_VulkanData.s_Swapchain.s_ImageCount; i++) {
-		if (!VulkanFramebufferUtils::Create(&m_VulkanData.s_Swapchain.s_Framebuffers[i], i)) {
-			EN_ERROR("Failed to create framebuffer for image index %d.", i);
-			return false;
-		}
-	}
-
-	// Create depth image
-	if (!VulkanImageUtils::Create(m_VulkanData.s_DepthImage)) {
-		EN_ERROR("Failed to create depth image. Shutting down.");
-		return false;
-	}
-
-	// Create Vulkan image
-	if (!VulkanImageUtils::Create(m_VulkanData.s_VulkanImage)) {
-		EN_ERROR("Failed to create vulkan image.");
-		return false;
-	}
-
-	// Create VertexBuffer Right before the graphics pipeline
-	if (!VulkanBufferUtils::GeneratePlaneData(&m_VulkanData.s_VertexBuffer, &m_VulkanData.s_IndexBuffer, 10, 10, 2, 2) ||
-		!VulkanBufferUtils::CreateVertexBuffer(m_VulkanData.s_VertexBuffer) ||
-		!VulkanBufferUtils::CreateIndexBuffer(m_VulkanData.s_IndexBuffer) ||
-		!VulkanBufferUtils::CreateUniformBuffer(m_VulkanData.s_UniformBuffer)) {
-		EN_ERROR("Failed to create vertex buffer. Shutting down.");
-		return false;
-	}
-
-	// Create graphics pipeline
-	if (!VulkanPipelineUtils::Create(&m_VulkanData.s_Pipeline)) {
-		EN_ERROR("Failed to create vulkan pipeline. Shutting down.");
-		return false;
+	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
+		m_Framebuffers[i] = new VulkanFramebuffer({ width,
+												   height,
+												   i,
+												   m_Instance.m_Allocator,
+												   m_Device,
+												   m_DepthImage,
+												   m_Pipeline.m_Renderpass,
+												   m_Swapchain });
 	}
 
 	// Create descriptor pool and sets
-	if (!VulkanPipelineUtils::CreateDescriptorPool() ||
-		!VulkanPipelineUtils::CreateDescriptorSets()) {
-		EN_ERROR("Failed to create descriptor pool or sets.");
-		return false;
-	}
+	m_Pipeline.createDescriptorPool();
+	m_Pipeline.createDescriptorSets(m_VulkanImage.m_View, m_UniformBuffer, m_VulkanImage.m_Sampler);
 
-	m_VulkanData.s_CommandBuffers.Resize(m_VulkanData.s_FramesInFlight);
-	// Create Command buffers
-	for (unsigned int i = 0; i < m_VulkanData.s_FramesInFlight; i++) {
-		if (!VulkanCommandbufferUtils::Create(&m_VulkanData.s_CommandBuffers[i])) {
-			EN_ERROR("Failed to create vulkan command buffer. Shutting down.");
-			return false;
-		}
+	// Create command buffers
+	m_CommandBuffers.Resize(m_FramesInFlight);
+	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
+		m_CommandBuffers[i] = new VulkanCommandbuffer(m_Device, m_Device.m_CommandPool);
 	}
 
 	// Create sync objects
-	m_VulkanData.s_ImageAvailableSemaphores.Resize(m_VulkanData.s_FramesInFlight);
-	m_VulkanData.s_RenderFinishedSemaphores.Resize(m_VulkanData.s_FramesInFlight);
-	m_VulkanData.s_InFlightFences.Resize(m_VulkanData.s_FramesInFlight);
-	for (unsigned int i = 0; i < m_VulkanData.s_FramesInFlight; i++) {
-		if (!VulkanSyncObjects::CreateVkSemaphore(&m_VulkanData.s_ImageAvailableSemaphores[i]) ||
-			!VulkanSyncObjects::CreateVkSemaphore(&m_VulkanData.s_RenderFinishedSemaphores[i]) ||
-			!VulkanSyncObjects::CreateVkFence(&m_VulkanData.s_InFlightFences[i])) {
-			EN_ERROR("Failed to create vulkan sync objects. Shutting down.");
-			return false;
-		}
-	}
-
-
-	return true;
+	m_Swapchain.createSyncObjects(m_FramesInFlight);
 }
 
-bool VulkanRenderer::BeginFrame(VulkanData* data) {
+bool VulkanRenderer::beginFrame() {
 	// Wait for the previous frame to finish
-	vkWaitForFences(data->s_Device.s_LogicalDevice, 1, &data->s_InFlightFences[data->s_CurrentFrame], VK_TRUE, UINT64_MAX);
+	vkWaitForFences(m_Device.m_LogicalDevice, 1, &m_Swapchain.m_InFlightFences[m_Swapchain.m_CurrentFrame]->m_Handle, VK_TRUE, UINT64_MAX);
 
-	if (!VulkanSwapchainUtils::AcquireNextImage(&data->s_Swapchain)) {
+	if (!m_Swapchain.acquireNextImage()) {
 		EN_DEBUG("Swapchain recreation. Booting.");
 		return false;
 	}
 
-	vkResetFences(data->s_Device.s_LogicalDevice, 1, &data->s_InFlightFences[data->s_CurrentFrame]);
+	vkResetFences(m_Device.m_LogicalDevice, 1, &m_Swapchain.m_InFlightFences[m_Swapchain.m_CurrentFrame]->m_Handle);
 	// Reset command buffer
-	vkResetCommandBuffer(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, 0);
+	vkResetCommandBuffer(m_CommandBuffers[m_Swapchain.m_CurrentFrame]->m_Handle, 0);
 
-	VulkanCommandbufferUtils::Record(&data->s_CommandBuffers[data->s_CurrentFrame], data->s_Swapchain.s_CurrentSwapchainImageIndex);
-	VulkanPipelineUtils::Bind(&data->s_Pipeline, &data->s_CommandBuffers[data->s_CurrentFrame]);
+	if (!m_CommandBuffers[m_Swapchain.m_CurrentFrame]->record()) {
+		EN_ERROR("Failed to record command buffer.");
+		return false;
+	}
+
+	m_Pipeline.bind(m_CommandBuffers[m_Swapchain.m_CurrentFrame]);
 	return true;
 }
 
-bool VulkanRenderer::DrawFrame(VulkanData* data) {
+bool VulkanRenderer::drawFrame() {
 	// Maybe this does belong somewhere else
-	VulkanBufferUtils::UpdateUniformBuffer(data->s_UniformBuffer);
+	m_UniformBuffer.update(m_Swapchain.m_Width, m_Swapchain.m_Height, m_Swapchain.m_CurrentFrame);
 
-	VulkanRenderpassUtils::Begin(&data->s_Pipeline.s_Renderpass, data->s_Swapchain.s_CurrentSwapchainImageIndex, &data->s_CommandBuffers[data->s_CurrentFrame]);
-
+	m_Pipeline.m_Renderpass.begin(m_Swapchain.m_CurrentSwapchainImageIndex,
+								  m_CommandBuffers[m_Swapchain.m_CurrentFrame],
+								  m_Swapchain.m_Extent,
+								  m_Framebuffers);
 	VkViewport viewport{};
 	viewport.x = 0.0f;
 	viewport.y = 0.0f;
-	viewport.width = static_cast<float>(data->s_Swapchain.s_Width);
-	viewport.height = static_cast<float>(data->s_Swapchain.s_Height);
+	viewport.width = static_cast<float>(m_Swapchain.m_Width);
+	viewport.height = static_cast<float>(m_Swapchain.m_Height);
 	viewport.minDepth = 0.0f;
 	viewport.maxDepth = 1.0f;
-	vkCmdSetViewport(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, 0, 1, &viewport);
+	vkCmdSetViewport(m_CommandBuffers[m_Swapchain.m_CurrentFrame]->m_Handle, 0, 1, &viewport);
 
 	// Create scissor
 	VkRect2D scissor{};
 	scissor.offset = { 0, 0 };
-	scissor.extent = data->s_Swapchain.s_Extent;
-	vkCmdSetScissor(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, 0, 1, &scissor);
+	scissor.extent = m_Swapchain.m_Extent;
+	vkCmdSetScissor(m_CommandBuffers[m_Swapchain.m_CurrentFrame]->m_Handle, 0, 1, &scissor);
 
 	// Bind Buffers
-	VkBuffer vertexBuffers[] = {m_VulkanData.s_VertexBuffer.s_Handle};
+	VkBuffer vertexBuffers[] = {m_VertexBuffer.m_InternalBuffer->m_Handle};
 	VkDeviceSize offsets[] = { 0 };
-	vkCmdBindVertexBuffers(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, 0, 1, vertexBuffers, offsets);
-	vkCmdBindIndexBuffer(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, data->s_IndexBuffer.s_Handle, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdBindVertexBuffers(m_CommandBuffers[m_Swapchain.m_CurrentFrame]->m_Handle,
+							0,
+							1,
+							vertexBuffers,
+							offsets);
+	vkCmdBindIndexBuffer(m_CommandBuffers[m_Swapchain.m_CurrentFrame]->m_Handle,
+						 m_IndexBuffer.m_InternalBuffer->m_Handle,
+						 0,
+						 VK_INDEX_TYPE_UINT32);
 
-	vkCmdBindDescriptorSets(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle,
+	vkCmdBindDescriptorSets(m_CommandBuffers[m_Swapchain.m_CurrentFrame]->m_Handle,
 		VK_PIPELINE_BIND_POINT_GRAPHICS,
-		data->s_Pipeline.s_Layout,
+		m_Pipeline.m_Layout,
 		0,
 		1,
-		&data->s_DescriptorSets[data->s_CurrentFrame],
+		&m_Pipeline.m_DescriptorSets[m_Swapchain.m_CurrentFrame],
 		0,
 		nullptr);
-	vkCmdDrawIndexed(data->s_CommandBuffers[data->s_CurrentFrame].s_Handle, static_cast<uint32_t>(data->s_IndexBuffer.s_Indices.Size()), 1, 0, 0, 0);
-
+	vkCmdDrawIndexed(m_CommandBuffers[m_Swapchain.m_CurrentFrame]->m_Handle,
+					 static_cast<uint32_t>(m_IndexBuffer.m_Indices->Size()),
+					 1,
+					 0,
+					 0,
+					 0);
 	return true;
 }
 
-bool VulkanRenderer::EndFrame(VulkanData* data) {
-	if (!VulkanRenderpassUtils::End(&data->s_Pipeline.s_Renderpass, data->s_Swapchain.s_CurrentSwapchainImageIndex, &data->s_CommandBuffers[data->s_CurrentFrame])) {
+bool VulkanRenderer::endFrame() {
+	if (m_Pipeline.m_Renderpass.end(m_Swapchain.m_CurrentSwapchainImageIndex,
+									m_CommandBuffers[m_Swapchain.m_CurrentFrame])) {
 		EN_ERROR("Failed to end renderpass.");
 		return false;
 	}
 
-	if (!VulkanCommandbufferUtils::End(&data->s_CommandBuffers[data->s_CurrentFrame])) {
+	if (!m_CommandBuffers[m_Swapchain.m_CurrentFrame]->end()) {
 		EN_ERROR("Failed to end command buffer.");
 		return false;
 	}
@@ -189,84 +161,61 @@ bool VulkanRenderer::EndFrame(VulkanData* data) {
 	// Submitting the command buffer
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	VkSemaphore waitSemaphores[] = { data->s_ImageAvailableSemaphores[data->s_CurrentFrame]};
+	VkSemaphore waitSemaphores[] = { m_Swapchain.m_ImageAvailableSemaphores[m_Swapchain.m_CurrentFrame]->m_Handle};
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 	submitInfo.waitSemaphoreCount = 1;
 	submitInfo.pWaitSemaphores = waitSemaphores;
 	submitInfo.pWaitDstStageMask = waitStages;
 	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &data->s_CommandBuffers[data->s_CurrentFrame].s_Handle;
+	submitInfo.pCommandBuffers = &m_CommandBuffers[m_Swapchain.m_CurrentFrame]->m_Handle;
 
-	VkSemaphore signalSemaphores[] = { data->s_RenderFinishedSemaphores[data->s_CurrentFrame]};
+	VkSemaphore signalSemaphores[] = { m_Swapchain.m_RenderFinishedSemaphores[m_Swapchain.m_CurrentFrame]->m_Handle};
 	submitInfo.signalSemaphoreCount = 1;
 	submitInfo.pSignalSemaphores = signalSemaphores;
 
-	VkResult result = vkQueueSubmit(data->s_Device.s_GraphicsQueue, 1, &submitInfo, data->s_InFlightFences[data->s_CurrentFrame]);
+	VkResult result = vkQueueSubmit(m_Device.m_GraphicsQueue,
+									1,
+									&submitInfo,
+									m_Swapchain.m_InFlightFences[m_Swapchain.m_CurrentFrame]->m_Handle);
 	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-		VulkanSwapchainUtils::Recreate(&data->s_Swapchain, data->s_FramebufferWidth, data->s_FramebufferHeight);
+		m_Swapchain.recreate({ m_FramebufferWidth,
+							   m_FramebufferHeight,
+							   m_Device,
+							   m_Instance.m_Allocator });
 	}
 	else if(result != VK_SUCCESS) {
 		EN_ERROR("vkQueueSubmit failed with result: %s.", VulkanResultString(result, true));
 	}
 
-	VulkanSwapchainUtils::Present(&data->s_Swapchain);
-	m_VulkanData.s_CurrentFrame = (m_VulkanData.s_CurrentFrame + 1) % m_VulkanData.s_FramesInFlight;
+	m_Swapchain.present();
+	m_Swapchain.m_CurrentFrame = (m_Swapchain.m_CurrentFrame + 1) % m_FramesInFlight;
 	return true;
 }
 
 
 
 bool VulkanRenderer::OnResize(const void* sender, EventContext context, EventType type) {
-	m_VulkanData.s_FramebufferWidth = context.u32[0];
-	m_VulkanData.s_FramebufferHeight = context.u32[1];
-	m_VulkanData.s_FramebufferGeneration++;
+	m_FramebufferWidth = context.u32[0];
+	m_FramebufferHeight = context.u32[1];
+	m_FramebufferGeneration++;
 	return true;
 }
 
-void VulkanRenderer::Shutdown() {
+VulkanRenderer::~VulkanRenderer() {
 	// Destroy vulkan objects in the reverse order they were created
-	vkDeviceWaitIdle(m_VulkanData.s_Device.s_LogicalDevice);
+	vkDeviceWaitIdle(m_Device.m_LogicalDevice);
 
-	VulkanBufferUtils::Destroy(&m_VulkanData.s_IndexBuffer);
-	VulkanBufferUtils::Destroy(&m_VulkanData.s_VertexBuffer);
-
-	// Destroy uniform buffers
-	for (unsigned int i = 0; i < m_VulkanData.s_FramesInFlight; i++) {
-		vkDestroyBuffer(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_UniformBuffer.s_UniformBuffers[i], m_VulkanData.s_Allocator);
-		vkFreeMemory(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_UniformBuffer.s_UniformBuffersMemory[i], m_VulkanData.s_Allocator);
+	// Destroy command buffers
+	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
+		delete m_CommandBuffers[i];
 	}
-
-	vkDestroyDescriptorPool(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_DescriptorPool, nullptr);
-	vkDestroyDescriptorSetLayout(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_Pipeline.s_DescriptorSetLayout, m_VulkanData.s_Allocator);
-
-
-	// Destroy sync objects
-	for (unsigned int i = 0; i < m_VulkanData.s_FramesInFlight; i++) {
-		VulkanSyncObjects::DestroyVkSemaphore(&m_VulkanData.s_RenderFinishedSemaphores[i]);
-		VulkanSyncObjects::DestroyVkSemaphore(&m_VulkanData.s_ImageAvailableSemaphores[i]);
-		VulkanSyncObjects::DestroyVkFence(&m_VulkanData.s_InFlightFences[i]);
-	}
-
-	vkDestroyDescriptorSetLayout(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_Pipeline.s_DescriptorSetLayout, m_VulkanData.s_Allocator);
-
-	VulkanPipelineUtils::Destroy(&m_VulkanData.s_Pipeline);
-	VulkanRenderpassUtils::Destroy(&m_VulkanData.s_Pipeline.s_Renderpass);
-	VulkanSwapchainUtils::Destroy(&m_VulkanData.s_Swapchain);
-
-	vkDestroySampler(m_VulkanData.s_Device.s_LogicalDevice, m_VulkanData.s_Sampler, m_VulkanData.s_Allocator);
-
-	VulkanImageUtils::Destroy(m_VulkanData.s_VulkanImage);
-
-	VulkanDeviceUtils::Destroy(&m_VulkanData.s_Device);
 
 	// Destroy debug utils messenger
 #ifdef _DEBUG
-	auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(m_VulkanData.s_Instance, "vkDestroyDebugUtilsMessengerEXT");
+	auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(m_Instance.getInternal(), "vkDestroyDebugUtilsMessengerEXT");
 	if (func != nullptr) {
-		func(m_VulkanData.s_Instance, m_VulkanData.s_DebugMessenger, m_VulkanData.s_Allocator);
+		func(m_Instance.getInternal(),m_Instance.m_DebugMessenger, &m_Instance.m_Allocator);
 	}
 #endif
-
-	Platform::DestroyVulkanSurface(m_VulkanData);
-	VulkanInstance::Destroy(&m_VulkanData.s_Instance);
+	Platform::destroyVulkanSurface(m_Device.m_Surface, m_Instance.getInternal(), m_Instance.m_Allocator);
 }

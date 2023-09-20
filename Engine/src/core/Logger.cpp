@@ -43,6 +43,6 @@ void Logger::LogMessage(LogLevel level, const char* message, ...) {
 		else {
 			level = LOG_LEVEL_TRACE;
 		}
-		Platform::LogMessage(level, out_message);
+		Platform::logMessage(level, out_message);
 	}
 }

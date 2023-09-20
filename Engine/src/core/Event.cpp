@@ -2,7 +2,7 @@
 #include "Defines.hpp"
 #include "Logger.hpp"
 
-RegisteredEvent::RegisteredEvent(const void* sender, pfnOnEvent callback, EventType type) {
+RegisteredEvent::RegisteredEvent(const void* sender, EventType type, pfnOnEvent callback) {
 	this->m_ID = INVALID_ID;
 	this->m_Callback = callback;
 	this->m_Type = type;
@@ -16,7 +16,7 @@ bool EventSystem::Initialize() {
 	
 	// Invalidate all registered events
 	for (int i = 0; i < m_RegisteredEvents.Size(); i++) {
-		RegisteredEvent e(nullptr, nullptr, EVENT_TYPE_MAX);
+		RegisteredEvent e(nullptr, EVENT_TYPE_MAX, nullptr);
 		e.SetID(INVALID_ID);
 		e.GetID();
 
@@ -25,7 +25,7 @@ bool EventSystem::Initialize() {
 	return true;
 }
 
-bool EventSystem::RegisterEvent(const void* sender, pfnOnEvent callback, EventType type) {
+bool EventSystem::RegisterEvent(const void* sender, EventType type, pfnOnEvent callback) {
 	if (callback) {
 		// Find empty slot in the registered events
 		for (int i = 0; i < m_RegisteredEvents.Size(); i++) {

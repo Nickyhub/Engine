@@ -2,11 +2,26 @@
 
 #include <vulkan/vulkan.h>
 
-class VulkanSyncObjects {
-public:
-	static bool CreateVkSemaphore(VkSemaphore* outSemaphore);
-	static bool CreateVkFence(VkFence* outFence);
+#include "VulkanDevice.hpp"
 
-	static void DestroyVkSemaphore(VkSemaphore* semaphore);
-	static void DestroyVkFence(VkFence* fence);
+class VulkanSemaphore {
+public:
+	VulkanSemaphore(const VulkanDevice& device, const VkAllocationCallbacks& allocator);
+	~VulkanSemaphore();
+public:
+	VkSemaphore m_Handle;
+private:
+	const VulkanDevice& m_Device;
+	const VkAllocationCallbacks& m_Allocator;
+};
+
+class VulkanFence {
+public:
+	VulkanFence(const VulkanDevice& device, const VkAllocationCallbacks& allocator);
+	~VulkanFence();
+public:
+	VkFence m_Handle;
+private:
+	const VulkanDevice& m_Device;
+	const VkAllocationCallbacks& m_Allocator;
 };
