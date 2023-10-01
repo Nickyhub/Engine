@@ -1,11 +1,12 @@
+#include <vector>
 #include "VulkanPipeline.hpp"
 #include "VulkanUtils.hpp"
 #include "VulkanBuffer.hpp"
 #include "VulkanFramebuffer.hpp"
 
 #include "core/File.hpp"
-#include "containers/DArray.hpp"
 #include "containers/Array.hpp"
+#include "core/Logger.hpp"
 
 VulkanPipeline::VulkanPipeline(const VulkanPipelineConfig& config)
 	: m_Device(config.s_Device), m_Allocator(config.s_Allocator),
@@ -21,13 +22,13 @@ VulkanPipeline::VulkanPipeline(const VulkanPipelineConfig& config)
 	vertexShader.Open("assets/shaders/MaterialShader.vert.spv", FILE_MODE_READ, true);
 	fragmentShader.Open("assets/shaders/MaterialShader.frag.spv", FILE_MODE_READ, true);
 
-	DArray<char> vertexShaderSource;
-	vertexShaderSource.Resize(vertexShader.Size());
-	DArray<char> fragmentShaderSource;
-	fragmentShaderSource.Resize(fragmentShader.Size());
+	std::vector<char> vertexShaderSource;
+	vertexShaderSource.resize(vertexShader.Size());
+	std::vector<char> fragmentShaderSource;
+	fragmentShaderSource.resize(fragmentShader.Size());
 
-	vertexShader.ReadAllBytes(vertexShaderSource.GetData());
-	fragmentShader.ReadAllBytes(fragmentShaderSource.GetData());
+	vertexShader.ReadAllBytes(vertexShaderSource.data());
+	fragmentShader.ReadAllBytes(fragmentShaderSource.data());
 
 	vertexShader.Close();
 	fragmentShader.Close();
@@ -39,7 +40,7 @@ VulkanPipeline::VulkanPipeline(const VulkanPipelineConfig& config)
 	VkShaderModuleCreateInfo vertexCreateInfo{};
 	vertexCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	vertexCreateInfo.codeSize = vertexShader.Size();
-	vertexCreateInfo.pCode = reinterpret_cast<const uint32_t*>(vertexShaderSource.GetData());
+	vertexCreateInfo.pCode = reinterpret_cast<const uint32_t*>(vertexShaderSource.data());
 
 	VK_CHECK(vkCreateShaderModule(m_Device.m_LogicalDevice,
 								  &vertexCreateInfo,
@@ -50,7 +51,7 @@ VulkanPipeline::VulkanPipeline(const VulkanPipelineConfig& config)
 	VkShaderModuleCreateInfo fragmentCreateInfo{};
 	fragmentCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	fragmentCreateInfo.codeSize = fragmentShader.Size();
-	fragmentCreateInfo.pCode = reinterpret_cast<const uint32_t*>(fragmentShaderSource.GetData());
+	fragmentCreateInfo.pCode = reinterpret_cast<const uint32_t*>(fragmentShaderSource.data());
 
 	VK_CHECK(vkCreateShaderModule(m_Device.m_LogicalDevice,
 								  &fragmentCreateInfo,
@@ -85,7 +86,7 @@ VulkanPipeline::VulkanPipeline(const VulkanPipelineConfig& config)
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 	// TODO not hardcode this dude
 	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.vertexAttributeDescriptionCount = config.s_VertexBuffer.m_AttributeDescriptions.Size();
+	vertexInputInfo.vertexAttributeDescriptionCount = (uint32_t) config.s_VertexBuffer.m_AttributeDescriptions.size();
 	vertexInputInfo.pVertexBindingDescriptions = &config.s_VertexBuffer.m_BindingDescription;
 	vertexInputInfo.pVertexAttributeDescriptions = &config.s_VertexBuffer.m_AttributeDescriptions[0];
 
@@ -229,8 +230,8 @@ void VulkanPipeline::bind(VulkanCommandbuffer* commandbuffer) {
 }
 
 bool VulkanPipeline::createDescriptorPool() {
-	DArray<VkDescriptorPoolSize> poolSizes;
-	poolSizes.Resize(2);
+	std::vector<VkDescriptorPoolSize> poolSizes;
+	poolSizes.resize(2);
 
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	poolSizes[0].descriptorCount = static_cast<uint32_t>(m_FramesInFlight);
@@ -240,7 +241,7 @@ bool VulkanPipeline::createDescriptorPool() {
 	VkDescriptorPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = 2;
-	poolInfo.pPoolSizes = poolSizes.GetData();
+	poolInfo.pPoolSizes = poolSizes.data();
 	poolInfo.maxSets = static_cast<uint32_t>(m_FramesInFlight);
 
 	VK_CHECK(vkCreateDescriptorPool(m_Device.m_LogicalDevice, &poolInfo, &m_Allocator, &m_DescriptorPool));
@@ -249,19 +250,19 @@ bool VulkanPipeline::createDescriptorPool() {
 
 bool VulkanPipeline::createDescriptorSets(const VkImageView& imageView, const UniformBuffer& uniformBuffer, const VkSampler& sampler) {
 	// This surely breaks something I guess
-	DArray<VkDescriptorSetLayout> layouts;
+	std::vector<VkDescriptorSetLayout> layouts;
 	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
-		layouts.PushBack(m_DescriptorSetLayout);
+		layouts.push_back(m_DescriptorSetLayout);
 	}
 
 	VkDescriptorSetAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	allocInfo.descriptorPool = m_DescriptorPool;
 	allocInfo.descriptorSetCount = static_cast<uint32_t>(m_FramesInFlight);
-	allocInfo.pSetLayouts = layouts.GetData();
+	allocInfo.pSetLayouts = layouts.data();
 
-	m_DescriptorSets.Resize(m_FramesInFlight);
-	VK_CHECK(vkAllocateDescriptorSets(m_Device.m_LogicalDevice, &allocInfo, m_DescriptorSets.GetData()));
+	m_DescriptorSets.resize(m_FramesInFlight);
+	VK_CHECK(vkAllocateDescriptorSets(m_Device.m_LogicalDevice, &allocInfo, m_DescriptorSets.data()));
 
 	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
 		VkDescriptorBufferInfo bufferInfo{};
@@ -274,8 +275,8 @@ bool VulkanPipeline::createDescriptorSets(const VkImageView& imageView, const Un
 		imageInfo.imageView = imageView;
 		imageInfo.sampler = sampler;
 
-		DArray<VkWriteDescriptorSet> descriptorWrites;
-		descriptorWrites.Resize(2);
+		std::vector<VkWriteDescriptorSet> descriptorWrites;
+		descriptorWrites.resize(2);
 
 		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptorWrites[0].dstSet = m_DescriptorSets[i];
@@ -293,9 +294,8 @@ bool VulkanPipeline::createDescriptorSets(const VkImageView& imageView, const Un
 		descriptorWrites[1].descriptorCount = 1;
 		descriptorWrites[1].pImageInfo = &imageInfo;
 
-		vkUpdateDescriptorSets(m_Device.m_LogicalDevice, static_cast<uint32_t>(descriptorWrites.Size()), descriptorWrites.GetData(), 0, nullptr);
+		vkUpdateDescriptorSets(m_Device.m_LogicalDevice, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 	}
-
 	return true;
 }
 
@@ -336,4 +336,5 @@ VulkanPipeline::~VulkanPipeline() {
 
 	vkDestroyPipeline(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
 	vkDestroyPipelineLayout(m_Device.m_LogicalDevice, m_Layout, &m_Allocator);
+	EN_INFO("Vulkan pipeline destroyed.");
 }

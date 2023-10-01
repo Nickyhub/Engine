@@ -1,6 +1,6 @@
 #pragma once
 #include <vulkan/vulkan.h>
-#include "containers/DArray.hpp"
+#include <vector>
 #include "Defines.hpp"
 
 #include "VulkanDevice.hpp"
@@ -38,16 +38,17 @@ public:
 	const VulkanDevice& m_Device;
 	VkExtent2D m_Extent;
 	VkSurfaceFormatKHR m_SurfaceFormat{};
-	DArray<VkImageView> m_ImageViews;
+	std::vector<VkImageView> m_ImageViews;
 
 	// Sync Objects
-	DArray<VulkanSemaphore*> m_ImageAvailableSemaphores{};
-	DArray<VulkanSemaphore*> m_RenderFinishedSemaphores{};
-	DArray<VulkanFence*> m_InFlightFences{};
+	std::vector<VulkanSemaphore*> m_ImageAvailableSemaphores{};
+	std::vector<VulkanSemaphore*> m_RenderFinishedSemaphores{};
+	std::vector<VulkanFence*> m_InFlightFences{};
+
 private:
 	VkSwapchainKHR m_Handle = nullptr;
 	VkPresentModeKHR m_PresentMode{};
-	DArray<VkImage> m_Images;
+	std::vector<VkImage> m_Images;
 
 	unsigned int m_ImageViewCount = 0;
 };

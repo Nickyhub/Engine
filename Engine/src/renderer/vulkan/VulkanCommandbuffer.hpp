@@ -10,11 +10,14 @@ class VulkanCommandbuffer {
 public:
 	VulkanCommandbuffer() = delete;
 	VulkanCommandbuffer(const VulkanDevice& device, const VkCommandPool& pool);
-	bool record();
+	bool begin();
 	bool end();
 
-	VkCommandBuffer beginSingleUseCommands();
-	void endSingleUseCommands(VkQueue queue);
+	static VkCommandBuffer beginSingleUseCommands(const VulkanDevice& device, const VkCommandPool& pool);
+	static void endSingleUseCommands(const VkCommandBuffer& commandBuffer,
+									 const VkQueue& queue,
+									 const VulkanDevice& device,
+									 const VkCommandPool& pool);
 	// No Destroy() because Vulkan frees the buffers automatically when destroying the command pool
 public:
 	VkCommandBuffer m_Handle;

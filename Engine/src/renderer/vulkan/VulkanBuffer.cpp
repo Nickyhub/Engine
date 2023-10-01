@@ -1,16 +1,17 @@
 #define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
-#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 
 #include "VulkanBuffer.hpp"
 #include "VulkanCommandbuffer.hpp"
 #include "VulkanUtils.hpp"
+
 #include "containers/Array.hpp"
 #include "core/Random.hpp"
+#include "core/Memory.hpp"
+#include "core/Logger.hpp"
 
 VulkanBuffer::VulkanBuffer(const VulkanDevice& device,
 	VkDeviceSize size,
@@ -49,15 +50,14 @@ VulkanBuffer::VulkanBuffer(const VulkanDevice& device,
 		0);
 }
 
-bool VulkanBuffer::copyBuffer(VkBuffer dstBuffer, VkDeviceSize size, VkCommandPool pool, VkQueue queue) {
-	VulkanCommandbuffer commandBuffer(m_Device, pool);
-	commandBuffer.beginSingleUseCommands();
+bool VulkanBuffer::copyBuffer(VkBuffer dstBuffer, VkDeviceSize size, VkQueue queue) {
+	VkCommandBuffer commandBuffer = VulkanCommandbuffer::beginSingleUseCommands(m_Device, m_Device.m_CommandPool);
 
 	VkBufferCopy copyRegion{};
 	copyRegion.size = size;
-	vkCmdCopyBuffer(commandBuffer.m_Handle, m_Handle, dstBuffer, 1, &copyRegion);
+	vkCmdCopyBuffer(commandBuffer, m_Handle, dstBuffer, 1, &copyRegion);
 
-	commandBuffer.endSingleUseCommands(queue);
+	VulkanCommandbuffer::endSingleUseCommands(commandBuffer, queue, m_Device, m_Device.m_CommandPool);
 	return true;
 }
 
@@ -70,6 +70,7 @@ int VulkanBuffer::findMemoryType(const VulkanDevice& device, unsigned int typeFi
 			return i;
 		}
 	}
+	EN_WARN("No appropriate memory type has been found. Returning 0.");
 	return 0;
 }
 
@@ -82,16 +83,15 @@ VulkanBuffer::~VulkanBuffer() {
 		&m_Allocator);
 }
 
-VertexBuffer::VertexBuffer(DArray<Vertex>* vertices,
+VertexBuffer::VertexBuffer(std::vector<Vertex>* vertices,
 	const VulkanDevice& device,
 	const VkAllocationCallbacks& allocator)
 	: m_Device(device), m_Allocator(allocator), m_Vertices(vertices) {
-	if (vertices->Size() == 0) {
+	if (vertices->size() == 0) {
 		EN_WARN("CreateVertexBuffer was called with an empty set of vertices. Nothing happens.");
 	}
 
-	// First calculate and set the buffer size.
-	unsigned int bufferSize = m_Vertices->Size() * sizeof(m_Vertices[0]);
+
 	VkVertexInputBindingDescription bindingDescription{};
 	bindingDescription.binding = 0;
 	bindingDescription.stride = sizeof(Vertex);
@@ -107,7 +107,7 @@ VertexBuffer::VertexBuffer(DArray<Vertex>* vertices,
 	// inColor
 	attributeDescriptions[1].binding = 0;
 	attributeDescriptions[1].location = 1;
-	attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
 	attributeDescriptions[1].offset = offsetof(Vertex, s_Colour);
 
 	// inTexCoord
@@ -117,11 +117,14 @@ VertexBuffer::VertexBuffer(DArray<Vertex>* vertices,
 	attributeDescriptions[2].offset = offsetof(Vertex, s_TexCoord);
 
 	// Copy the produced data to the buffer
-	m_AttributeDescriptions.PushBack(attributeDescriptions[0]);
-	m_AttributeDescriptions.PushBack(attributeDescriptions[1]);
-	m_AttributeDescriptions.PushBack(attributeDescriptions[2]);
+	m_AttributeDescriptions.push_back(attributeDescriptions[0]);
+	m_AttributeDescriptions.push_back(attributeDescriptions[1]);
+	m_AttributeDescriptions.push_back(attributeDescriptions[2]);
 
 	m_BindingDescription = bindingDescription;
+
+	// First calculate and set the buffer size.
+	size_t bufferSize = m_Vertices->size() * sizeof(m_Vertices[0]);
 
 	VulkanBuffer stagingBuffer(m_Device,
 		bufferSize,
@@ -137,7 +140,7 @@ VertexBuffer::VertexBuffer(DArray<Vertex>* vertices,
 		bufferSize,
 		0,
 		&data);
-	memcpy(data, m_Vertices->GetData(), (size_t)bufferSize);
+	memcpy(data, m_Vertices->data(), m_Vertices->size() * sizeof(m_Vertices[0]));
 	vkUnmapMemory(m_Device.m_LogicalDevice, stagingBuffer.m_Memory);
 
 	m_InternalBuffer = new VulkanBuffer(m_Device,
@@ -147,15 +150,16 @@ VertexBuffer::VertexBuffer(DArray<Vertex>* vertices,
 		m_Allocator);
 
 
-	stagingBuffer.copyBuffer(m_InternalBuffer->m_Handle,
-							 bufferSize,
-							 m_Device.m_CommandPool,
-							 m_Device.m_GraphicsQueue);
+	if (!stagingBuffer.copyBuffer(m_InternalBuffer->m_Handle,
+		bufferSize,
+		m_Device.m_GraphicsQueue)) {
+		EN_ERROR("Failed to copy staging buffer to actual vulkan buffer.");
+	}
 	// Staging buffer will be automatically destroyed when destructor is called at the
 	// end of this method
 }
 
-DArray<Vertex>* VertexBuffer::generatePlaneData(unsigned int width, unsigned int height, unsigned int fieldWidth, unsigned int fieldHeight) {
+std::vector<Vertex>* VertexBuffer::generatePlaneData(unsigned int width, unsigned int height, unsigned int fieldWidth, unsigned int fieldHeight) {
 	/*for (unsigned int i = 0; i < height; i++) {
 		for (unsigned int j = 0; j < width; j++) {
 			glm::vec3 v = { i* fieldWidth, j* fieldHeight, Random::GetRandomNumberInWholeRange(-1, 1) };
@@ -163,34 +167,38 @@ DArray<Vertex>* VertexBuffer::generatePlaneData(unsigned int width, unsigned int
 			outBuffer->s_Vertices.PushBack({ v,c });
 		}
 	}*/
-	DArray<Vertex>* vertices = new DArray<Vertex>();
-	vertices->PushBack({ {-0.5f, -0.5f, 0.0f}, { 1.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 0.0f} });
-	vertices->PushBack({ {0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} });
-	vertices->PushBack({ {0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 1.0f} });
-	vertices->PushBack({ {-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f} });
+	std::vector<Vertex>* vertices = new std::vector<Vertex>();
+	vertices->push_back({ {-0.5f, -0.5f, 0.0f}, { 1.0f, 0.0f, 0.0f}, {1.0f, 0.0f} });
+	vertices->push_back({ {0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} });
+	vertices->push_back({ {0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f} });
+	vertices->push_back({ {-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f} });
 
-	vertices->PushBack({ {-0.5f, -0.5f, 1.0f}, { 1.0f, 0.0f, 0.0f, 0.0f}, {1.0f, 0.0f} });
-	vertices->PushBack({ {0.5f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f, 0.0f}, {0.0f, 0.0f} });
-	vertices->PushBack({ {0.5f, 0.5f, 1.0f}, {0.0f, 0.0f, 1.0f, 0.0f}, {0.0f, 1.0f} });
-	vertices->PushBack({ {-0.5f, 0.5f, 1.0f}, {1.0f, 1.0f, 1.0f, 0.0f}, {1.0f, 1.0f} });
+	vertices->push_back({ {-0.5f, -0.5f, 1.0f}, { 1.0f, 0.0f, 0.0f}, {1.0f, 0.0f} });
+	vertices->push_back({ {0.5f, -0.5f, 1.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} });
+	vertices->push_back({ {0.5f, 0.5f, 1.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f} });
+	vertices->push_back({ {-0.5f, 0.5f, 1.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f} });
+	/*for (int i = 0; i < 8; i++) {
+		vertices->push_back({ {0 + float(i * 8), 1 + float(i * 8), 2 + float(i * 8)}, { 3 + float(i * 8), 4 + float(i * 8), 5 + float(i * 8)}, {6 + float(i * 8), 7 + float(i * 8)} });
+	}*/
 	return vertices;
 }
 
 VertexBuffer::~VertexBuffer() {
 	delete m_InternalBuffer;
 	delete m_Vertices;
+	EN_INFO("Vertex buffer destroyed.");
 }
 
 
-IndexBuffer::IndexBuffer(DArray<unsigned int>* indices,
+IndexBuffer::IndexBuffer(std::vector<unsigned int>* indices,
 	const VulkanDevice& device,
 	const VkAllocationCallbacks& allocator)
 	: m_Indices(indices), m_Device(device), m_Allocator(allocator) {
-	if (m_Indices->Size() == 0) {
+	if (m_Indices->size() == 0) {
 		EN_WARN("CreateIndexBuffer was called with an empty set of vertices. Nothing happens.");
 	}
 	// Calculate and set index buffer size
-	unsigned int bufferSize = sizeof(unsigned int) * m_Indices->Size();
+	size_t bufferSize = sizeof(unsigned int) * m_Indices->size();
 
 	VulkanBuffer stagingBuffer(m_Device,
 		bufferSize,
@@ -205,7 +213,7 @@ IndexBuffer::IndexBuffer(DArray<unsigned int>* indices,
 		bufferSize,
 		0,
 		&data);
-	memcpy(data, m_Indices->GetData(), (size_t)bufferSize);
+	memcpy(data, m_Indices->data(), bufferSize);
 	vkUnmapMemory(m_Device.m_LogicalDevice,
 		stagingBuffer.m_Memory);
 
@@ -217,26 +225,26 @@ IndexBuffer::IndexBuffer(DArray<unsigned int>* indices,
 
 	stagingBuffer.copyBuffer(m_InternalBuffer->m_Handle,
 							 bufferSize,
-							 m_Device.m_CommandPool,
 							 m_Device.m_GraphicsQueue);
 	// Clean up staging buffer(destructor will be called since its stack allocated)
+	EN_INFO("Index buffer created.");
 }
 
-DArray<unsigned int>* IndexBuffer::generateExampleIndices() {
-	DArray<unsigned int>* indices = new DArray<unsigned int>();
-	indices->PushBack(0);
-	indices->PushBack(1);
-	indices->PushBack(2);
-	indices->PushBack(2);
-	indices->PushBack(3);
-	indices->PushBack(0);
+std::vector<unsigned int>* IndexBuffer::generateExampleIndices() {
+	std::vector<unsigned int>* indices = new std::vector<unsigned int>();
+	indices->push_back(0);
+	indices->push_back(1);
+	indices->push_back(2);
+	indices->push_back(2);
+	indices->push_back(3);
+	indices->push_back(0);
 
-	indices->PushBack(4);
-	indices->PushBack(5);
-	indices->PushBack(6);
-	indices->PushBack(6);
-	indices->PushBack(7);
-	indices->PushBack(4);
+	indices->push_back(4);
+	indices->push_back(5);
+	indices->push_back(6);
+	indices->push_back(6);
+	indices->push_back(7);
+	indices->push_back(4);
 
 	return indices;
 }
@@ -244,14 +252,15 @@ DArray<unsigned int>* IndexBuffer::generateExampleIndices() {
 IndexBuffer::~IndexBuffer() {
 	delete m_InternalBuffer;
 	delete m_Indices;
+	EN_INFO("Index buffer destroyed.");
 }
 
 UniformBuffer::UniformBuffer(unsigned int framesInFlight, const VulkanDevice& device, const VkAllocationCallbacks& allocator)
 	: m_Device(device), m_Allocator(allocator) {
 	VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
-	m_Buffers.Resize(framesInFlight);
-	m_UniformBuffersMapped.Resize(framesInFlight);
+	m_Buffers.resize(framesInFlight);
+	m_UniformBuffersMapped.resize(framesInFlight);
 
 	for (unsigned int i = 0; i < framesInFlight; i++) {
 		m_Buffers[i] = new VulkanBuffer(device,
@@ -259,13 +268,21 @@ UniformBuffer::UniformBuffer(unsigned int framesInFlight, const VulkanDevice& de
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			m_Allocator);
+		vkMapMemory(m_Device.m_LogicalDevice,
+			m_Buffers[i]->m_Memory,
+			0,
+			bufferSize,
+			0,
+			&m_UniformBuffersMapped[i]);
 	}
+	EN_INFO("Uniform buffer created.");
 }
 
 UniformBuffer::~UniformBuffer() {
-	for (unsigned int i = 0; i < m_Buffers.Size(); i++) {
+	for (unsigned int i = 0; i < m_Buffers.size(); i++) {
 		delete m_Buffers[i];
 	}
+	EN_INFO("Uniform buffer destroyed.");
 }
 
 void UniformBuffer::update(unsigned int width, unsigned int height, unsigned int currentFrame) {
@@ -286,4 +303,3 @@ void UniformBuffer::update(unsigned int width, unsigned int height, unsigned int
 
 	Memory::Copy(m_UniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
 }
-

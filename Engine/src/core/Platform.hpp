@@ -16,7 +16,7 @@ public:
 	void pSleep(long ms);
 	static double getAbsoluteTime();
 	static VkSurfaceKHR createVulkanSurface(const VkInstance& instance, const VkAllocationCallbacks& allocator);
-	static void destroyVulkanSurface(VkSurfaceKHR surface, VkInstance instance, VkAllocationCallbacks allocator);
+	static void destroyVulkanSurface(VkSurfaceKHR surface, VkInstance instance, VkAllocationCallbacks* allocator);
 
 	static unsigned int Width;
 	static unsigned int Height;

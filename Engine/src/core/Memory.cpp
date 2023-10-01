@@ -5,7 +5,7 @@
 
 const char* Memory::m_MemoryTagStrings[MEMORY_TAG_MAX] = {
 	 "MEMORY_TAG_ARRAY",
-	 "MEMORY_TAG_DARRAY",
+	 "MEMORY_TAG_std::vector",
 	 "MEMORY_TAG_TEXTURE",
 	 "MEMORY_TAG_MESH",
 	 "MEMORY_TAG_RENDERER"

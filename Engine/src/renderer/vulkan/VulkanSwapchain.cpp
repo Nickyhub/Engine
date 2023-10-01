@@ -1,3 +1,5 @@
+#include "core/Logger.hpp"
+
 #include "VulkanSwapchain.hpp"
 #include "VulkanUtils.hpp"
 
@@ -89,11 +91,11 @@ bool VulkanSwapchain::create(const VulkanSwapchainConfig& config) {
 
 	// Retrieving the swapchain image handles to render to them later
 	vkGetSwapchainImagesKHR(m_Device.m_LogicalDevice, m_Handle, &m_ImageCount, nullptr);
-	m_Images.Resize(imageCount);
-	vkGetSwapchainImagesKHR(m_Device.m_LogicalDevice, m_Handle, &m_ImageCount, m_Images.GetData());
+	m_Images.resize(imageCount);
+	vkGetSwapchainImagesKHR(m_Device.m_LogicalDevice, m_Handle, &m_ImageCount, m_Images.data());
 
 	// Create image views
-	m_ImageViews.Resize(imageCount);
+	m_ImageViews.resize(imageCount);
 	m_ImageViewCount = imageCount;
 
 	for (unsigned int i = 0; i < imageCount; i++) {
@@ -121,13 +123,14 @@ bool VulkanSwapchain::create(const VulkanSwapchainConfig& config) {
 									&createInfo,
 									&m_Allocator, &m_ImageViews[i]));
 	}
+
 	return true;
 }
 
 void VulkanSwapchain::createSyncObjects(unsigned int framesInFlight) {
-	m_ImageAvailableSemaphores.Resize(framesInFlight);
-	m_RenderFinishedSemaphores.Resize(framesInFlight);
-	m_InFlightFences.Resize(framesInFlight);
+	m_ImageAvailableSemaphores.resize(framesInFlight);
+	m_RenderFinishedSemaphores.resize(framesInFlight);
+	m_InFlightFences.resize(framesInFlight);
 	for (unsigned int i = 0; i < framesInFlight; i++) {
 		m_ImageAvailableSemaphores[i] = new VulkanSemaphore(m_Device, m_Allocator);
 		m_RenderFinishedSemaphores[i] = new VulkanSemaphore(m_Device, m_Allocator);
@@ -199,11 +202,12 @@ void VulkanSwapchain::destroy() {
 	vkDestroySwapchainKHR(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
 	m_Handle = 0;
 
-	for (unsigned int i = 0; i < m_ImageAvailableSemaphores.Size(); i++) {
+	for (unsigned int i = 0; i < m_ImageAvailableSemaphores.size(); i++) {
 		delete m_ImageAvailableSemaphores[i];
 		delete m_RenderFinishedSemaphores[i];
 		delete m_InFlightFences[i];
 	}
+	EN_INFO("Vulkan swapchain destroyed.");
 }
 
 VulkanSwapchain::~VulkanSwapchain() {

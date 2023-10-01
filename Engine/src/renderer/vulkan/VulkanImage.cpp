@@ -4,12 +4,13 @@
 
 #include <stb_image.h>
 
-#include "core/Application.hpp"
-#include "core/Logger.hpp"
 #include "VulkanImage.hpp"
 #include "VulkanBuffer.hpp"
 #include "VulkanCommandbuffer.hpp"
 #include "VulkanUtils.hpp"
+
+#include "core/Application.hpp"
+#include "core/Memory.hpp"
 
 /**
  * Depending on the usage a depth image and its view will be created. If it is a colored image it
@@ -17,17 +18,17 @@
  * TODO Do not hard code the path of colored image. Wrap this in a general texture system
  */
 VulkanImage::VulkanImage(const VulkanImageConfig& config)
-	: m_Device(config.s_Device), m_Allocator(config.s_Allocator) {
-	VkMemoryRequirements memRequirements;
-	vkGetImageMemoryRequirements(m_Device.m_LogicalDevice, m_Handle, &memRequirements);
+	: m_Device(config.s_Device),
+	  m_Allocator(config.s_Allocator) {
 	switch (config.s_Usage) {
 		case VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT: {
-			createImage(config, VulkanBuffer::findMemoryType(m_Device, memRequirements.memoryTypeBits, config.s_Properties));
+			createImage(config);
 			createImageView(config.s_Format, VK_IMAGE_ASPECT_DEPTH_BIT);
+			break;
 		}
-		case VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT: {
+		case VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT: {
 			stbi_uc* pixels = stbi_load("assets/textures/texture.jpg", &m_Width, &m_Height, &m_Channels, STBI_rgb_alpha);
-			VkDeviceSize imageSize = (VkDeviceSize)m_Width * m_Height * 4;
+			VkDeviceSize imageSize = (VkDeviceSize)(m_Width * m_Height * 4);
 
 			if (!pixels) {
 				EN_ERROR("Failed to load image from disk.");
@@ -49,20 +50,32 @@ VulkanImage::VulkanImage(const VulkanImageConfig& config)
 			// Clean up pixel data
 			stbi_image_free(pixels);
 
-			if (!createImage(config,
-							 stagingBuffer.findMemoryType(m_Device, memRequirements.memoryTypeBits, config.s_Properties))) {
+			// TODO: Should use config width and height. When a texture system is in place it will load
+			// the texture from disk and provide the width and height for the vulkan image from outside.
+			// Outside meaning a generic texture class that uses VulkanImage class in the background.
+			if (!createImage({m_Width,
+							  m_Height,
+							  config.s_Format,
+							  config.s_Tiling,
+							  config.s_Usage,
+							  config.s_Properties, 
+							  config.s_Device, 
+							  config.s_Allocator})) {
 				EN_ERROR("Failed to create vulkan image.");
 			}
 
 			// Transition the image layout and copy the staging buffers content to the vulkan image
 			transitionImageLayout(m_Handle,
-								  VK_FORMAT_R8G8B8A8_SRGB,
-								  VK_IMAGE_LAYOUT_UNDEFINED,
-								  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-			copyBufferToImage(stagingBuffer.m_Handle, config.s_Width, config.s_Height);
+				VK_FORMAT_R8G8B8A8_SRGB,
+				VK_IMAGE_LAYOUT_UNDEFINED,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+			copyBufferToImage(stagingBuffer.m_Handle, m_Width, m_Height);
 
 			// Transition the layout again for the shader
-			transitionImageLayout(m_Handle, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			transitionImageLayout(m_Handle,
+				VK_FORMAT_R8G8B8A8_SRGB,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 			if (!createImageView(VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT)) {
 				EN_ERROR("Failed to create Image view.");
@@ -72,11 +85,12 @@ VulkanImage::VulkanImage(const VulkanImageConfig& config)
 				EN_ERROR("Failed to create texture image sampler.");
 			}
 			// Cleanup (destructor of VulkanBuffer will be called here for staging buffer)
+			break;
 		}
 	};
 }
 
-bool VulkanImage::createImage(const VulkanImageConfig& config, int memoryType) {
+bool VulkanImage::createImage(const VulkanImageConfig& config) {
 	// Create the vulkan image
 	VkImageCreateInfo imageInfo{};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -101,10 +115,11 @@ bool VulkanImage::createImage(const VulkanImageConfig& config, int memoryType) {
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = memoryType;
+	allocInfo.memoryTypeIndex = VulkanBuffer::findMemoryType(m_Device, memRequirements.memoryTypeBits, config.s_Properties);
 
 	if (vkAllocateMemory(m_Device.m_LogicalDevice, &allocInfo, nullptr, &m_Memory) != VK_SUCCESS) {
-		throw std::runtime_error("failed to allocate image memory!");
+		EN_ERROR("Failed to allocate image memory.");
+		return false;
 	}
 
 	vkBindImageMemory(m_Device.m_LogicalDevice, m_Handle, m_Memory, 0);
@@ -158,15 +173,15 @@ bool VulkanImage::createDepthImage(const VulkanImageConfig& config) {
 	VkMemoryRequirements memRequirements;
 	vkGetImageMemoryRequirements(m_Device.m_LogicalDevice, m_Handle, &memRequirements);
 	// Create VkImage
-	if (!createImage(config, VulkanBuffer::findMemoryType(m_Device, memRequirements.memoryTypeBits, config.s_Properties))) {
+	if (!createImage(config)) {
 		EN_ERROR("Failed to create VkImage for depth image.");
 		return false;
 	}
 	return true;
 }
 
-VkFormat VulkanImage::findSupportedFormat(DArray<VkFormat> candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
-	for (unsigned int i = 0; i < candidates.Size(); i++) {
+VkFormat VulkanImage::findSupportedFormat(std::vector<VkFormat> candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
+	for (unsigned int i = 0; i < candidates.size(); i++) {
 		VkFormatProperties props;
 		vkGetPhysicalDeviceFormatProperties(m_Device.m_PhysicalDevice, candidates[i], &props);
 		if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
@@ -181,11 +196,10 @@ VkFormat VulkanImage::findSupportedFormat(DArray<VkFormat> candidates, VkImageTi
 }
 
 void VulkanImage::transitionImageLayout(VkImage image,
-										VkFormat format,
-										VkImageLayout oldLayout,
-										VkImageLayout newLayout) {
-	VulkanCommandbuffer commandBuffer(m_Device, m_Device.m_CommandPool);
-	commandBuffer.beginSingleUseCommands();
+	VkFormat format,
+	VkImageLayout oldLayout,
+	VkImageLayout newLayout) {
+	VkCommandBuffer commandBuffer = VulkanCommandbuffer::beginSingleUseCommands(m_Device, m_Device.m_CommandPool);
 
 	VkImageMemoryBarrier barrier{};
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -223,14 +237,9 @@ void VulkanImage::transitionImageLayout(VkImage image,
 
 		sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 		destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-
-		if (hasStencilComponent(format)) {
-			barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-		}
-		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 	}
 	else {
-		EN_ERROR("Unsupported layout transition in VulkanImageUtils::TransitionImageLayout.");
+		EN_ERROR("Unsupported image layout transition.");
 	}
 
 	if (newLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
@@ -238,22 +247,20 @@ void VulkanImage::transitionImageLayout(VkImage image,
 	}
 
 	vkCmdPipelineBarrier(
-		commandBuffer.m_Handle,
+		commandBuffer,
 		sourceStage, destinationStage,
 		0,
 		0, nullptr,
 		0, nullptr,
 		1, &barrier
 	);
-
-	commandBuffer.endSingleUseCommands(m_Device.m_GraphicsQueue);
+	VulkanCommandbuffer::endSingleUseCommands(commandBuffer, m_Device.m_GraphicsQueue, m_Device, m_Device.m_CommandPool);
 }
 
-void VulkanImage::copyBufferToImage(VkBuffer buffer,
-									uint32_t width,
-									uint32_t height) {
-	VulkanCommandbuffer commandBuffer(m_Device, m_Device.m_CommandPool);
-	commandBuffer.beginSingleUseCommands();
+void VulkanImage::copyBufferToImage(const VkBuffer& buffer,
+	uint32_t width,
+	uint32_t height) {
+	VkCommandBuffer commandBuffer = VulkanCommandbuffer::beginSingleUseCommands(m_Device, m_Device.m_CommandPool);
 
 	VkBufferImageCopy region{};
 	region.bufferOffset = 0;
@@ -273,14 +280,14 @@ void VulkanImage::copyBufferToImage(VkBuffer buffer,
 	};
 
 	vkCmdCopyBufferToImage(
-		commandBuffer.m_Handle,
+		commandBuffer,
 		buffer,
 		m_Handle,
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		1,
 		&region
 	);
-	commandBuffer.endSingleUseCommands(m_Device.m_GraphicsQueue);
+	VulkanCommandbuffer::endSingleUseCommands(commandBuffer, m_Device.m_GraphicsQueue, m_Device, m_Device.m_CommandPool);
 }
 
 VulkanImage::~VulkanImage() {
@@ -290,4 +297,6 @@ VulkanImage::~VulkanImage() {
 	vkDestroyImageView(m_Device.m_LogicalDevice, m_View, &m_Allocator);
 	vkDestroyImage(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
 	vkFreeMemory(m_Device.m_LogicalDevice, m_Memory, &m_Allocator);
+
+	EN_INFO("Vulkan image destroyed.");
 }

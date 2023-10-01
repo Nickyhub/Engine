@@ -1,6 +1,8 @@
 #include "VulkanCommandbuffer.hpp"
 #include "VulkanUtils.hpp"
 
+#include "core/Logger.hpp"
+
 VulkanCommandbuffer::VulkanCommandbuffer(const VulkanDevice& device, const VkCommandPool& pool) 
 	: m_Device(device), m_Pool(pool) {
 	VkCommandBufferAllocateInfo allocInfo{};
@@ -14,7 +16,7 @@ VulkanCommandbuffer::VulkanCommandbuffer(const VulkanDevice& device, const VkCom
 									  &m_Handle));
 }
 
-bool VulkanCommandbuffer::record() {
+bool VulkanCommandbuffer::begin() {
 	VkCommandBufferBeginInfo beginInfo{};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	beginInfo.flags = 0;
@@ -24,32 +26,34 @@ bool VulkanCommandbuffer::record() {
 	return true;
 }
 
-VkCommandBuffer VulkanCommandbuffer::beginSingleUseCommands() {
+VkCommandBuffer VulkanCommandbuffer::beginSingleUseCommands(const VulkanDevice& device, const VkCommandPool& pool) {
 	VkCommandBufferAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandPool = m_Pool;
+	allocInfo.commandPool = pool;
 	allocInfo.commandBufferCount = 1;
 
 	VkCommandBuffer commandBuffer;
-	vkAllocateCommandBuffers(m_Device.m_LogicalDevice, &allocInfo, &commandBuffer);
+	vkAllocateCommandBuffers(device.m_LogicalDevice, &allocInfo, &commandBuffer);
 
 	VkCommandBufferBeginInfo beginInfo{};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-	vkBeginCommandBuffer(commandBuffer, &beginInfo);
-
+	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 	return commandBuffer;
 }
 
-void VulkanCommandbuffer::endSingleUseCommands(VkQueue queue) {
-	vkEndCommandBuffer(m_Handle);
+void VulkanCommandbuffer::endSingleUseCommands(const VkCommandBuffer& commandBuffer,
+											   const VkQueue& queue,
+											   const VulkanDevice& device, 
+											   const VkCommandPool& pool) {
+	vkEndCommandBuffer(commandBuffer);
 
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &m_Handle;
+	submitInfo.pCommandBuffers = &commandBuffer;
 
 	vkQueueSubmit(queue,
 				  1,
@@ -57,10 +61,10 @@ void VulkanCommandbuffer::endSingleUseCommands(VkQueue queue) {
 				  VK_NULL_HANDLE);
 	vkQueueWaitIdle(queue);
 
-	vkFreeCommandBuffers(m_Device.m_LogicalDevice,
-						 m_Pool,
+	vkFreeCommandBuffers(device.m_LogicalDevice,
+						 pool,
 						 1,
-						 &m_Handle);
+						 &commandBuffer);
 }
 
 bool VulkanCommandbuffer::end() {

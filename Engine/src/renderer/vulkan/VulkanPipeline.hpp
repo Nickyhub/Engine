@@ -28,16 +28,17 @@ public:
 	bool createDescriptorSets(const VkImageView& imageView, const UniformBuffer& uniformBuffer, const VkSampler& sampler);
 private:
 	bool createDescriptorSetLayout();
+private:
+	const VulkanDevice& m_Device; // needs to be initialized before the renderpass but still kept private
+	const VkAllocationCallbacks& m_Allocator;
 public:
 	VulkanRenderpass m_Renderpass;
 	VkDescriptorSetLayout m_DescriptorSetLayout;
 	VkPipelineLayout m_Layout;
-	DArray<VkDescriptorSet> m_DescriptorSets{};
+	std::vector<VkDescriptorSet> m_DescriptorSets{};
 	VkDescriptorPool m_DescriptorPool;
 private:
 	const unsigned int& m_FramesInFlight;
-	const VulkanDevice& m_Device;
-	const VkAllocationCallbacks& m_Allocator;
 
 	VkPipeline m_Handle;
 };

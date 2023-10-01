@@ -1,4 +1,5 @@
 #include "containers/Array.hpp"
+#include "core/Logger.hpp"
 
 #include "VulkanRenderpass.hpp"
 #include "VulkanCommandbuffer.hpp"
@@ -68,8 +69,8 @@ VulkanRenderpass::VulkanRenderpass(const VulkanDevice& device, VkFormat colorFor
 	EN_DEBUG("Renderpass created.");
 }
 
-bool VulkanRenderpass::begin(unsigned int imageIndex, VulkanCommandbuffer* commandBuffer, VkExtent2D extent, const DArray<VulkanFramebuffer*>& framebuffers) {
-	if (imageIndex <= framebuffers.Size()) {
+bool VulkanRenderpass::begin(unsigned int imageIndex, VulkanCommandbuffer* commandBuffer, VkExtent2D extent, const std::vector<VulkanFramebuffer*>& framebuffers) {
+	if (imageIndex <= framebuffers.size()) {
 		VkRenderPassBeginInfo renderpassInfo{};
 		renderpassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		renderpassInfo.renderPass = m_Handle;
@@ -100,4 +101,5 @@ bool VulkanRenderpass::end(unsigned int imageIndex, VulkanCommandbuffer* command
 
 VulkanRenderpass::~VulkanRenderpass() {
 	vkDestroyRenderPass(m_Device.m_LogicalDevice, m_Handle,	&m_Allocator);
+	EN_INFO("Vulkan renderpass destroyed.");
 }

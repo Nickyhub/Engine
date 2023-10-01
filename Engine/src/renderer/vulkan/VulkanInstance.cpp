@@ -5,7 +5,7 @@
 #include "core/Logger.hpp"
 #include "core/Platform.hpp"
 #include "core/String.hpp"
-#include "containers/DArray.hpp"
+#include <vector>
 
 // Callback for the Debug Messenger for validation layer errors
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -63,9 +63,9 @@ void VulkanInstance::create(const VulkanInstanceConfig& instanceConfig) {
 	// Available extensions
 	unsigned int extensionCount = 0;
 	vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-	DArray<VkExtensionProperties> availableExtensions;
-	availableExtensions.Resize(extensionCount);
-	vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, availableExtensions.GetData());
+	std::vector<VkExtensionProperties> availableExtensions;
+	availableExtensions.resize(extensionCount);
+	vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, availableExtensions.data());
 
 	EN_INFO("Available extensions:");
 	for (unsigned int i = 0; i < extensionCount; i++) {
@@ -85,11 +85,11 @@ void VulkanInstance::create(const VulkanInstanceConfig& instanceConfig) {
 	// Enable validation layer support in debug mode
 #ifdef _DEBUG
 	// Get available validation layers
-	DArray<VkLayerProperties> availableValidationLayers;
+	std::vector<VkLayerProperties> availableValidationLayers;
 	unsigned int validationLayerCount;
 	vkEnumerateInstanceLayerProperties(&validationLayerCount, nullptr);
-	availableValidationLayers.Resize(validationLayerCount);
-	vkEnumerateInstanceLayerProperties(&validationLayerCount, availableValidationLayers.GetData());
+	availableValidationLayers.resize(validationLayerCount);
+	vkEnumerateInstanceLayerProperties(&validationLayerCount, availableValidationLayers.data());
 
 	// Check if the required layers are available
 	bool found = false;
@@ -97,6 +97,7 @@ void VulkanInstance::create(const VulkanInstanceConfig& instanceConfig) {
 		for (unsigned int j = 0; j < instanceConfig.s_ValidationLayers.size(); j++) {
 			if (String::StringCompare(availableValidationLayers[i].layerName, instanceConfig.s_ValidationLayers[j])) {
 				found = true;
+				break;
 			}
 		}
 	}
@@ -108,10 +109,10 @@ void VulkanInstance::create(const VulkanInstanceConfig& instanceConfig) {
 	}
 
 #endif
-	VK_CHECK(vkCreateInstance(&createInfo, &m_Allocator, &this->m_Handle));
+	VK_CHECK(vkCreateInstance(&createInfo, m_Allocator, &this->m_Handle));
 #ifdef _DEBUG
 	// Can only create Debug Messenger after Instance has already been created
-	createDebugMessenger(&this->m_Handle, &m_DebugMessenger);
+	createDebugMessenger(this->m_Handle, &m_DebugMessenger);
 #endif
 	EN_DEBUG("Vulkan instance created!");
 }
@@ -119,11 +120,11 @@ void VulkanInstance::create(const VulkanInstanceConfig& instanceConfig) {
 VulkanInstance::~VulkanInstance() {
 	EN_DEBUG("Destroying Vulkan Instance.");
 	if (this->m_Handle) {
-		vkDestroyInstance(this->m_Handle, &m_Allocator);
+		vkDestroyInstance(this->m_Handle, m_Allocator);
 	}
 }
 
-bool VulkanInstance::createDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debugMessenger) {
+bool VulkanInstance::createDebugMessenger(const VkInstance& instance, VkDebugUtilsMessengerEXT* debugMessenger) {
 	VkDebugUtilsMessengerCreateInfoEXT createInfo;
 	createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -131,8 +132,8 @@ bool VulkanInstance::createDebugMessenger(VkInstance* instance, VkDebugUtilsMess
 	createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 	createInfo.pfnUserCallback = debugCallback;
 
-	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(*instance, "vkCreateDebugUtilsMessengerEXT");
-	VkResult result = func(*instance, &createInfo, &m_Allocator, debugMessenger);
+	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+	VkResult result = func(instance, &createInfo, m_Allocator, debugMessenger);
 	if (result != VK_SUCCESS) {
 		EN_ERROR("Failed to create Debug Messenger.");
 		return false;

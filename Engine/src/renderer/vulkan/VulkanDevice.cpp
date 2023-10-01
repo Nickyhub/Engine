@@ -6,10 +6,10 @@
 #include "core/Platform.hpp"
 
 
-VulkanDevice::VulkanDevice(const VulkanInstance& instance, bool enableSamplerAnisotropy, bool enableFillModeNonSolid) 
-	: m_Instance(instance) {
-	m_Surface = Platform::createVulkanSurface(instance.getInternal(), instance.m_Allocator);
-	m_PhysicalDevice = selectPhysicalDevice();
+VulkanDevice::VulkanDevice(const VulkanInstance& instance, bool enableSamplerAnisotropy, bool enableFillModeNonSolid)
+ 	: m_Instance(instance),
+	  m_Surface(Platform::createVulkanSurface(instance.getInternal(), *m_Instance.m_Allocator)),
+	  m_PhysicalDevice(selectPhysicalDevice()) {
 	if (!m_PhysicalDevice) {
 		EN_ERROR("No physical device present.");
 	}
@@ -21,19 +21,27 @@ VulkanDevice::VulkanDevice(const VulkanInstance& instance, bool enableSamplerAni
 	familyIndices[1] = m_PresentQueueFamilyIndex;
 	familyIndices[2] = m_TransferQueueFamilyIndex;
 	familyIndices[3] = m_ComputeQueueFamilyIndex;
-	DArray<unsigned int> uniqueFamilyIndices;
+
+	std::vector<unsigned int> uniqueFamilyIndices;
+	// Put at least the first index in the list because at this point it will be unique
+	uniqueFamilyIndices.push_back(familyIndices[0]); 
+	// Filter out unique indices
 	for (unsigned int i = 0; i < familyIndices.Size(); i++) {
-		for (unsigned int j = 0; j < familyIndices.Size(); j++) {
-			if (i != j && familyIndices[i] != familyIndices[j] && !uniqueFamilyIndices.Contains(familyIndices[i])) {
-				uniqueFamilyIndices.PushBack(familyIndices[i]);
+		bool isUnique = false;
+		for (unsigned int j = 0; j < uniqueFamilyIndices.size(); j++) {
+			if (familyIndices[i] != uniqueFamilyIndices[j]) {
+				isUnique = true;
 				break;
 			}
+		}
+		if (isUnique) {
+			uniqueFamilyIndices.push_back(familyIndices[i]);
 		}
 	}
 
 	// Create and fill queue create infos
-	DArray<VkDeviceQueueCreateInfo> queueCreateInfos;
-	for (unsigned int i = 0; i < uniqueFamilyIndices.Size(); i++) {
+	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+	for (unsigned int i = 0; i < uniqueFamilyIndices.size(); i++) {
 		if (uniqueFamilyIndices[i] != -1) {
 			VkDeviceQueueCreateInfo queueCreateInfo{};
 			queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -41,7 +49,7 @@ VulkanDevice::VulkanDevice(const VulkanInstance& instance, bool enableSamplerAni
 			queueCreateInfo.queueCount = 1;
 			float queuePriority = 1.0f;
 			queueCreateInfo.pQueuePriorities = &queuePriority;
-			queueCreateInfos.PushBack(queueCreateInfo);
+			queueCreateInfos.push_back(queueCreateInfo);
 		}
 		else {
 			EN_WARN("Graphics queue family index does not exist. No Graphics Queue created.");
@@ -56,8 +64,8 @@ VulkanDevice::VulkanDevice(const VulkanInstance& instance, bool enableSamplerAni
 	// Creating the logical device
 	VkDeviceCreateInfo createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	createInfo.pQueueCreateInfos = queueCreateInfos.GetData();
-	createInfo.queueCreateInfoCount = queueCreateInfos.Size();
+	createInfo.pQueueCreateInfos = queueCreateInfos.data();
+	createInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
 	createInfo.pEnabledFeatures = &deviceFeatures;
 
 	const char** extensionNames = (const char* [1])VK_KHR_SWAPCHAIN_EXTENSION_NAME;
@@ -67,7 +75,7 @@ VulkanDevice::VulkanDevice(const VulkanInstance& instance, bool enableSamplerAni
 	createInfo.enabledLayerCount = 0;
 	createInfo.ppEnabledLayerNames = 0;
 
-	VK_CHECK(vkCreateDevice(m_PhysicalDevice, &createInfo, &instance.m_Allocator, &m_LogicalDevice));
+	VK_CHECK(vkCreateDevice(m_PhysicalDevice, &createInfo, instance.m_Allocator, &m_LogicalDevice));
 
 	// Get the queue handles after logical device creation
 	vkGetDeviceQueue(m_LogicalDevice, m_GraphicsQueueFamilyIndex, 0, &m_GraphicsQueue);
@@ -80,7 +88,7 @@ VulkanDevice::VulkanDevice(const VulkanInstance& instance, bool enableSamplerAni
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	poolInfo.queueFamilyIndex = m_GraphicsQueueFamilyIndex;
 	poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-	VK_CHECK(vkCreateCommandPool(m_LogicalDevice, &poolInfo, &m_Instance.m_Allocator, &m_CommandPool));
+	VK_CHECK(vkCreateCommandPool(m_LogicalDevice, &poolInfo, m_Instance.m_Allocator, &m_CommandPool));
 	EN_DEBUG("Command pool created for graphics queue.");
 	EN_DEBUG("Logical device created.");
 }
@@ -88,14 +96,15 @@ VulkanDevice::VulkanDevice(const VulkanInstance& instance, bool enableSamplerAni
 VulkanDevice::~VulkanDevice() {
 	vkDestroyCommandPool(m_LogicalDevice, m_CommandPool, nullptr);
 	vkDestroyDevice(m_LogicalDevice, nullptr);
+	EN_INFO("VulkanDevice destroye.");
 }
 
 VkFormat VulkanDevice::findDepthFormat() const {
 	// Format candidates
-	DArray<VkFormat> candidates;
-	candidates.PushBack(VK_FORMAT_D32_SFLOAT);
-	candidates.PushBack(VK_FORMAT_D32_SFLOAT_S8_UINT);
-	candidates.PushBack(VK_FORMAT_D24_UNORM_S8_UINT);
+	std::vector<VkFormat> candidates;
+	candidates.push_back(VK_FORMAT_D32_SFLOAT);
+	candidates.push_back(VK_FORMAT_D32_SFLOAT_S8_UINT);
+	candidates.push_back(VK_FORMAT_D24_UNORM_S8_UINT);
 
 	unsigned int sizes[3] = {
 		4,
@@ -104,7 +113,7 @@ VkFormat VulkanDevice::findDepthFormat() const {
 
 	unsigned int  flags = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
 	for (int i = 0; i < 3; ++i) {
-		VkFormatProperties properties;
+		VkFormatProperties properties{};
 		vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, candidates[i], &properties);
 
 		if ((properties.linearTilingFeatures & flags) == flags) {
@@ -123,8 +132,8 @@ VkPhysicalDevice VulkanDevice::selectPhysicalDevice() {
 							  &deviceCount,
 							  nullptr);
 
-	DArray<VkPhysicalDevice> physicalDevices;
-	physicalDevices.Resize(deviceCount);
+	std::vector<VkPhysicalDevice> physicalDevices;
+	physicalDevices.resize(deviceCount);
 	VkPhysicalDeviceProperties properties;
 
 	// Fill out requirements for the Device and choose it based on them
@@ -136,7 +145,7 @@ VkPhysicalDevice VulkanDevice::selectPhysicalDevice() {
 	requirements.s_TransferQueue = true;
 	requirements.s_SamplerAnisotropy = true;
 
-	requirements.s_RequiredExtensions.PushBack(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+	requirements.s_RequiredExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
 	if (deviceCount == 0) {
 		EN_FATAL("Vulkan can not find a physical device. Cannot continue application.");
@@ -145,7 +154,7 @@ VkPhysicalDevice VulkanDevice::selectPhysicalDevice() {
 	else if (deviceCount == 1) {
 		vkEnumeratePhysicalDevices(m_Instance.getInternal(),
 								   &deviceCount,
-								   physicalDevices.GetData());
+								   physicalDevices.data());
 		vkGetPhysicalDeviceProperties(physicalDevices[0], &properties);
 		if (!physicalDeviceMeetsRequirements(&physicalDevices[0], requirements)) {
 			EN_FATAL("There is no device that meets the physical requirements. Cannot continue.");
@@ -155,11 +164,9 @@ VkPhysicalDevice VulkanDevice::selectPhysicalDevice() {
 		return physicalDevices[0];
 	}
 
-
-
 	// Multiple devices are present. Choose the most suitable
-	DArray<unsigned int> physicalDeviceScores;
-	physicalDeviceScores.Fill(0);
+	std::vector<unsigned int> physicalDeviceScores;
+	//physicalDeviceScores.Fill(0);
 
 	// Give every device a score
 	for (unsigned int i = 0; i < deviceCount; i++) {
@@ -209,9 +216,9 @@ bool VulkanDevice::physicalDeviceMeetsRequirements(const VkPhysicalDevice* devic
 	unsigned int queueFamilyCount = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(*device, &queueFamilyCount, nullptr);
 
-	DArray<VkQueueFamilyProperties> queueFamilies;
-	queueFamilies.Resize(queueFamilyCount);
-	vkGetPhysicalDeviceQueueFamilyProperties(*device, &queueFamilyCount, queueFamilies.GetData());
+	std::vector<VkQueueFamilyProperties> queueFamilies;
+	queueFamilies.resize(queueFamilyCount);
+	vkGetPhysicalDeviceQueueFamilyProperties(*device, &queueFamilyCount, queueFamilies.data());
 
 	int minTransferScore = 255;
 
@@ -324,12 +331,12 @@ bool VulkanDevice::physicalDeviceMeetsRequirements(const VkPhysicalDevice* devic
 
 		// Check if extensions are available
 		unsigned int availableExtensionCount = 0;
-		DArray<VkExtensionProperties> availableDeviceExtensions;
+		std::vector<VkExtensionProperties> availableDeviceExtensions;
 		vkEnumerateDeviceExtensionProperties(*device, 0, &availableExtensionCount, 0);
-		availableDeviceExtensions.Resize(availableExtensionCount);
-		vkEnumerateDeviceExtensionProperties(*device, 0, &availableExtensionCount, availableDeviceExtensions.GetData());
+		availableDeviceExtensions.resize(availableExtensionCount);
+		vkEnumerateDeviceExtensionProperties(*device, 0, &availableExtensionCount, availableDeviceExtensions.data());
 
-		for (unsigned int i = 0; i < requirements.s_RequiredExtensions.Size(); i++) {
+		for (unsigned int i = 0; i < requirements.s_RequiredExtensions.size(); i++) {
 			bool found = false;
 			for (unsigned int j = 0; j < availableExtensionCount; j++) {
 				if (String::StringCompare(availableDeviceExtensions[j].extensionName, requirements.s_RequiredExtensions[i])) {
@@ -365,10 +372,8 @@ bool VulkanDevice::physicalDeviceMeetsRequirements(const VkPhysicalDevice* devic
 bool VulkanDevice::querySwapchainSupport(const VkPhysicalDevice* device) {
 	// Create information structs to be filled
 	VkSurfaceCapabilitiesKHR capabilities;
-	//DArray<VkSurfaceFormatKHR> formats;
-	//DArray<VkPresentModeKHR> presentModes;
-
-	VulkanDeviceSwapchainSupportInfo* supportInfo = &m_SwapchainSupportInfo;
+	//std::vector<VkSurfaceFormatKHR> formats;
+	//std::vector<VkPresentModeKHR> presentModes;
 
 	// Query surface capabilities
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(*device, m_Surface, &capabilities);
@@ -378,8 +383,8 @@ bool VulkanDevice::querySwapchainSupport(const VkPhysicalDevice* device) {
 	vkGetPhysicalDeviceSurfaceFormatsKHR(*device, m_Surface, &formatCount, 0);
 	// Check if formats are available
 	if (formatCount != 0) {
-		supportInfo->s_Formats.Resize(formatCount);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(*device, m_Surface, &formatCount, supportInfo->s_Formats.GetData());
+		m_SwapchainSupportInfo.s_Formats.resize(formatCount);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(*device, m_Surface, &formatCount, m_SwapchainSupportInfo.s_Formats.data());
 	} else {
 		EN_ERROR("Physical device has no surface formats available. Skipping.");
 		return false;
@@ -390,17 +395,17 @@ bool VulkanDevice::querySwapchainSupport(const VkPhysicalDevice* device) {
 	vkGetPhysicalDeviceSurfacePresentModesKHR(*device, m_Surface, &presentModeCount, 0);
 	// Check if present modes are available
 	if (presentModeCount != 0) {
-		supportInfo->s_PresentModes.Resize(presentModeCount);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(*device, m_Surface, &presentModeCount, supportInfo->s_PresentModes.GetData());
+		m_SwapchainSupportInfo.s_PresentModes.resize(presentModeCount);
+		vkGetPhysicalDeviceSurfacePresentModesKHR(*device, m_Surface, &presentModeCount, m_SwapchainSupportInfo.s_PresentModes.data());
 	}
 	else {
 		EN_ERROR("Physical device has no surface present modes available. Skipping.");
 		return false;
 	}
-	supportInfo->s_FormatCount = formatCount;
-	supportInfo->s_PresentModeCount = presentModeCount;
+	m_SwapchainSupportInfo.s_FormatCount = formatCount;
+	m_SwapchainSupportInfo.s_PresentModeCount = presentModeCount;
 	// Set capabilities
-	supportInfo->s_Capabilities = capabilities;
+	m_SwapchainSupportInfo.s_Capabilities = capabilities;
 
 	EN_INFO("Vulkan swapchain support is sufficient and data has been copied to vulkan data.");
 	return true;

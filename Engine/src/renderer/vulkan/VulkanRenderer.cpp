@@ -14,43 +14,44 @@
 VulkanRenderer::VulkanRenderer(unsigned int width, unsigned int height) :
 	m_Instance(),
 	m_Device(m_Instance, VK_TRUE, VK_TRUE),
-	m_Swapchain({width, height, m_Device, m_Instance.m_Allocator}),
-	m_VulkanImage({width,
-					height,
+	m_Swapchain({width, height, m_Device, *m_Instance.m_Allocator}),
+	m_VulkanImage({ (int) width,
+					(int)height,
 					VK_FORMAT_R8G8B8A8_SRGB,
 					VK_IMAGE_TILING_OPTIMAL,
 					VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					m_Device,
-					m_Instance.m_Allocator}),
-	m_DepthImage({ width,
-				height,
-				m_Device.findDepthFormat(),
-				VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-				m_Device,
-				m_Instance.m_Allocator }),
+					*m_Instance.m_Allocator}),
+	m_DepthImage({ (int)width,
+				   (int)height,
+					m_Device.findDepthFormat(),
+					VK_IMAGE_TILING_OPTIMAL,
+					VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+					m_Device,
+					*m_Instance.m_Allocator }),
 	m_VertexBuffer(VertexBuffer::generatePlaneData(10, 10, 2, 2),
 		m_Device,
-		m_Instance.m_Allocator),
+		*m_Instance.m_Allocator),
 	m_Pipeline({ width,
 				 height,
 				 m_FramesInFlight,
 				 m_Swapchain.m_SurfaceFormat.format,
 				 m_VertexBuffer,
 				 m_Device,
-				 m_Instance.m_Allocator	}),
-	m_IndexBuffer(IndexBuffer::generateExampleIndices(), m_Device, m_Instance.m_Allocator),
-	m_UniformBuffer(m_FramesInFlight, m_Device, m_Instance.m_Allocator) {
+				 *m_Instance.m_Allocator	}),
+	m_IndexBuffer(IndexBuffer::generateExampleIndices(), m_Device, *m_Instance.m_Allocator),
+	m_UniformBuffer(m_FramesInFlight, m_Device, *m_Instance.m_Allocator) {
 	EN_DEBUG("Intializing Vulkan Renderer...");
 
-	// Create Framebuffers
-	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
+	// Create framebuffer and depth image
+	m_Framebuffers.resize(m_Swapchain.m_ImageCount);
+	for (unsigned int i = 0; i < m_Swapchain.m_ImageCount; i++) {
 		m_Framebuffers[i] = new VulkanFramebuffer({ width,
 												   height,
 												   i,
-												   m_Instance.m_Allocator,
+												   *m_Instance.m_Allocator,
 												   m_Device,
 												   m_DepthImage,
 												   m_Pipeline.m_Renderpass,
@@ -62,7 +63,7 @@ VulkanRenderer::VulkanRenderer(unsigned int width, unsigned int height) :
 	m_Pipeline.createDescriptorSets(m_VulkanImage.m_View, m_UniformBuffer, m_VulkanImage.m_Sampler);
 
 	// Create command buffers
-	m_CommandBuffers.Resize(m_FramesInFlight);
+	m_CommandBuffers.resize(m_FramesInFlight);
 	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
 		m_CommandBuffers[i] = new VulkanCommandbuffer(m_Device, m_Device.m_CommandPool);
 	}
@@ -84,7 +85,7 @@ bool VulkanRenderer::beginFrame() {
 	// Reset command buffer
 	vkResetCommandBuffer(m_CommandBuffers[m_Swapchain.m_CurrentFrame]->m_Handle, 0);
 
-	if (!m_CommandBuffers[m_Swapchain.m_CurrentFrame]->record()) {
+	if (!m_CommandBuffers[m_Swapchain.m_CurrentFrame]->begin()) {
 		EN_ERROR("Failed to record command buffer.");
 		return false;
 	}
@@ -138,7 +139,7 @@ bool VulkanRenderer::drawFrame() {
 		0,
 		nullptr);
 	vkCmdDrawIndexed(m_CommandBuffers[m_Swapchain.m_CurrentFrame]->m_Handle,
-					 static_cast<uint32_t>(m_IndexBuffer.m_Indices->Size()),
+					 static_cast<uint32_t>(m_IndexBuffer.m_Indices->size()),
 					 1,
 					 0,
 					 0,
@@ -147,7 +148,7 @@ bool VulkanRenderer::drawFrame() {
 }
 
 bool VulkanRenderer::endFrame() {
-	if (m_Pipeline.m_Renderpass.end(m_Swapchain.m_CurrentSwapchainImageIndex,
+	if (!m_Pipeline.m_Renderpass.end(m_Swapchain.m_CurrentSwapchainImageIndex,
 									m_CommandBuffers[m_Swapchain.m_CurrentFrame])) {
 		EN_ERROR("Failed to end renderpass.");
 		return false;
@@ -181,7 +182,7 @@ bool VulkanRenderer::endFrame() {
 		m_Swapchain.recreate({ m_FramebufferWidth,
 							   m_FramebufferHeight,
 							   m_Device,
-							   m_Instance.m_Allocator });
+							   *m_Instance.m_Allocator });
 	}
 	else if(result != VK_SUCCESS) {
 		EN_ERROR("vkQueueSubmit failed with result: %s.", VulkanResultString(result, true));
@@ -214,8 +215,9 @@ VulkanRenderer::~VulkanRenderer() {
 #ifdef _DEBUG
 	auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(m_Instance.getInternal(), "vkDestroyDebugUtilsMessengerEXT");
 	if (func != nullptr) {
-		func(m_Instance.getInternal(),m_Instance.m_DebugMessenger, &m_Instance.m_Allocator);
+		func(m_Instance.getInternal(),m_Instance.m_DebugMessenger, m_Instance.m_Allocator);
 	}
 #endif
 	Platform::destroyVulkanSurface(m_Device.m_Surface, m_Instance.getInternal(), m_Instance.m_Allocator);
+	EN_INFO("Vulkan renderer destroyed.");
 }

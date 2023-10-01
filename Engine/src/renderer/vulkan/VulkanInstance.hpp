@@ -19,13 +19,13 @@ public:
 	VkInstance getInternal() const { return m_Handle; }
 private:
 	void create(const VulkanInstanceConfig& instanceConfig);
-	bool createDebugMessenger(VkInstance* instance, VkDebugUtilsMessengerEXT* debugMessenger);
+	bool createDebugMessenger(const VkInstance& instance, VkDebugUtilsMessengerEXT* debugMessenger);
 public:
-	VkAllocationCallbacks m_Allocator{};
+	VkAllocationCallbacks* m_Allocator = nullptr;
 #ifdef _DEBUG
 	VkDebugUtilsMessengerEXT m_DebugMessenger{};
 #endif
 private:
 	// Maybe implemeent allocator here
-	VkInstance m_Handle;
+	VkInstance m_Handle{};
 };

@@ -111,7 +111,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\containers\Array.hpp" />
-    <ClInclude Include="src\containers\DArray.hpp" />
     <ClInclude Include="src\core\Application.hpp" />
     <ClInclude Include="src\core\Clock.hpp" />
     <ClInclude Include="src\core\Event.hpp" />

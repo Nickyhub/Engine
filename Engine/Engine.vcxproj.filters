@@ -116,9 +116,6 @@
     <ClInclude Include="src\renderer\vulkan\VulkanInstance.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\containers\DArray.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\renderer\vulkan\VulkanUtils.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>

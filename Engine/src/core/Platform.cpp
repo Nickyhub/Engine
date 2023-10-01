@@ -148,12 +148,12 @@ VkSurfaceKHR Platform::createVulkanSurface(const VkInstance& instance, const VkA
 	return result;
 }
 
-void Platform::destroyVulkanSurface(VkSurfaceKHR surface, VkInstance instance, VkAllocationCallbacks allocator) {
+void Platform::destroyVulkanSurface(VkSurfaceKHR surface, VkInstance instance, VkAllocationCallbacks* allocator) {
 	EN_DEBUG("Destroying vulkan surface.");
 	if (surface) {
 		vkDestroySurfaceKHR(instance,
 			surface,
-			&allocator);
+			allocator);
 	}
 }
 
