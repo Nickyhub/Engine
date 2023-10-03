@@ -101,5 +101,5 @@ bool VulkanRenderpass::end(unsigned int imageIndex, VulkanCommandbuffer* command
 
 VulkanRenderpass::~VulkanRenderpass() {
 	vkDestroyRenderPass(m_Device.m_LogicalDevice, m_Handle,	&m_Allocator);
-	EN_INFO("Vulkan renderpass destroyed.");
+	EN_DEBUG("Vulkan renderpass destroyed.");
 }

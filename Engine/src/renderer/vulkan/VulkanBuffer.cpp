@@ -186,7 +186,7 @@ std::vector<Vertex>* VertexBuffer::generatePlaneData(unsigned int width, unsigne
 VertexBuffer::~VertexBuffer() {
 	delete m_InternalBuffer;
 	delete m_Vertices;
-	EN_INFO("Vertex buffer destroyed.");
+	EN_DEBUG("Vertex buffer destroyed.");
 }
 
 
@@ -252,7 +252,7 @@ std::vector<unsigned int>* IndexBuffer::generateExampleIndices() {
 IndexBuffer::~IndexBuffer() {
 	delete m_InternalBuffer;
 	delete m_Indices;
-	EN_INFO("Index buffer destroyed.");
+	EN_DEBUG("Index buffer destroyed.");
 }
 
 UniformBuffer::UniformBuffer(unsigned int framesInFlight, const VulkanDevice& device, const VkAllocationCallbacks& allocator)
@@ -282,7 +282,7 @@ UniformBuffer::~UniformBuffer() {
 	for (unsigned int i = 0; i < m_Buffers.size(); i++) {
 		delete m_Buffers[i];
 	}
-	EN_INFO("Uniform buffer destroyed.");
+	EN_DEBUG("Uniform buffer destroyed.");
 }
 
 void UniformBuffer::update(unsigned int width, unsigned int height, unsigned int currentFrame) {

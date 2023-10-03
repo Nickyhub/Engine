@@ -10,7 +10,7 @@
 
 Systems::Systems(const SystemsConfig& config) :
 	s_Platform({ config.s_Name, config.s_Width, config.s_Heigth }),
-	s_Renderer({ config.s_Width, config.s_Heigth }) {
+	s_Renderer({ s_Platform.m_Handle, s_Platform.m_hInstance, config.s_Width, config.s_Heigth }) {
 
 }
 
@@ -88,19 +88,3 @@ void Application::run() {
 		frameCount++;
 	}
 }
-
-//bool Application::OnClose(const void* sender, EventContext context, EventType type) {
-//	m_Running = false;
-//	return true;
-//}
-//
-//bool Application::OnResize(const void* sender, EventContext context, EventType type) {
-//	m_Systems.s_Renderer.OnResize(sender, context, type);
-//	EN_DEBUG("Window resized to (%u width, %u height): ", context.u32[0], context.u32[1]);
-//	return true;
-//}
-//
-//bool Application::OnKey(const void* sender, EventContext context, EventType type) {
-//	EN_DEBUG("Key pressed: %c", context.u32[0]);
-//	return true;
-//}

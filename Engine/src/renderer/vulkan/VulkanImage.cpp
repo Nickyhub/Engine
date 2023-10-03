@@ -298,5 +298,5 @@ VulkanImage::~VulkanImage() {
 	vkDestroyImage(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
 	vkFreeMemory(m_Device.m_LogicalDevice, m_Memory, &m_Allocator);
 
-	EN_INFO("Vulkan image destroyed.");
+	EN_DEBUG("Vulkan image destroyed.");
 }

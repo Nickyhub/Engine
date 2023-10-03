@@ -11,9 +11,10 @@
 #include "core/Platform.hpp"
 #include "core/Application.hpp"
 
-VulkanRenderer::VulkanRenderer(unsigned int width, unsigned int height) :
+VulkanRenderer::VulkanRenderer(HWND windowHandle, HINSTANCE windowsInstance, unsigned int width, unsigned int height) :
 	m_Instance(),
-	m_Device(m_Instance, VK_TRUE, VK_TRUE),
+	m_Surface(windowHandle, windowsInstance, m_Instance),
+	m_Device(m_Surface, m_Instance, VK_TRUE, VK_TRUE),
 	m_Swapchain({width, height, m_Device, *m_Instance.m_Allocator}),
 	m_VulkanImage({ (int) width,
 					(int)height,
@@ -211,6 +212,11 @@ VulkanRenderer::~VulkanRenderer() {
 		delete m_CommandBuffers[i];
 	}
 
+	// Destroy framebuffers
+	for (unsigned int i = 0; i < m_Framebuffers.size(); i++) {
+		delete m_Framebuffers[i];
+	}
+
 	// Destroy debug utils messenger
 #ifdef _DEBUG
 	auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(m_Instance.getInternal(), "vkDestroyDebugUtilsMessengerEXT");
@@ -218,6 +224,5 @@ VulkanRenderer::~VulkanRenderer() {
 		func(m_Instance.getInternal(),m_Instance.m_DebugMessenger, m_Instance.m_Allocator);
 	}
 #endif
-	Platform::destroyVulkanSurface(m_Device.m_Surface, m_Instance.getInternal(), m_Instance.m_Allocator);
-	EN_INFO("Vulkan renderer destroyed.");
+	EN_DEBUG("Destroying Vulkan Renderer...");
 }

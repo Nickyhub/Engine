@@ -7,6 +7,10 @@
 #include "core/String.hpp"
 #include <vector>
 
+#include <vulkan/vulkan_win32.h>
+
+#include <exception>
+
 // Callback for the Debug Messenger for validation layer errors
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT messageSevertiy,
@@ -143,3 +147,27 @@ bool VulkanInstance::createDebugMessenger(const VkInstance& instance, VkDebugUti
 	return true;
 }
 
+VulkanSurface::VulkanSurface(HWND windowHandle,
+							 const HINSTANCE& windowsInstance,
+							 const VulkanInstance& instance) : m_WindowsInstance(windowsInstance), m_Instance(instance) {
+	VkWin32SurfaceCreateInfoKHR createInfo = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
+	createInfo.hinstance = m_WindowsInstance;
+	createInfo.hwnd = windowHandle;
+
+	VK_CHECK(vkCreateWin32SurfaceKHR(m_Instance.getInternal(), &createInfo, m_Instance.m_Allocator, &m_Handle));
+	EN_INFO("Surface created.");
+}
+
+VulkanSurface::~VulkanSurface() {
+	EN_DEBUG("Destroying vulkan surface.");
+	if (m_Handle) {
+		try {
+		vkDestroySurfaceKHR(m_Instance.getInternal(),
+			m_Handle,
+			m_Instance.m_Allocator);
+		}
+		catch (std::exception & e) {
+			EN_ERROR("Exception: %s", e.what());
+		}
+	}
+}

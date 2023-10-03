@@ -34,11 +34,7 @@ public:
 
 	void run();
 	
-	//On Event functions
-	/*bool OnClose(const void* sender, EventContext context, EventType type);
-	bool OnResize(const void* sender, EventContext context, EventType type);
-	bool OnKey(const void* sender, EventContext context, EventType type);*/
-	// Currently as lambdas in constructor
+	//On Event functions are currently defined as lambdas in constructor
 
 	const ApplicationConfig getConfig() { return m_Config; }
 public:

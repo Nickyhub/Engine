@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <windows.h>
 #include <vulkan/vulkan.h>
 
 struct VulkanInstanceConfig {
@@ -26,6 +27,20 @@ public:
 	VkDebugUtilsMessengerEXT m_DebugMessenger{};
 #endif
 private:
-	// Maybe implemeent allocator here
 	VkInstance m_Handle{};
+};
+
+class VulkanSurface {
+public:
+	VulkanSurface() = delete;
+	VulkanSurface(HWND windowHandle,
+		const HINSTANCE& windowsInstance,
+		const VulkanInstance& instance);
+	~VulkanSurface();
+
+private:
+	const HINSTANCE m_WindowsInstance;
+	const VulkanInstance& m_Instance;
+public:
+	VkSurfaceKHR m_Handle{};
 };

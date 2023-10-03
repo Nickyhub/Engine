@@ -56,7 +56,7 @@ bool VulkanSwapchain::create(const VulkanSwapchainConfig& config) {
 	// Actually creating the swapchain
 	VkSwapchainCreateInfoKHR createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-	createInfo.surface = m_Device.m_Surface;
+	createInfo.surface = m_Device.m_Surface.m_Handle;
 
 	createInfo.minImageCount = imageCount;
 	createInfo.imageFormat = m_SurfaceFormat.format;
@@ -207,7 +207,7 @@ void VulkanSwapchain::destroy() {
 		delete m_RenderFinishedSemaphores[i];
 		delete m_InFlightFences[i];
 	}
-	EN_INFO("Vulkan swapchain destroyed.");
+	EN_DEBUG("Vulkan swapchain destroyed.");
 }
 
 VulkanSwapchain::~VulkanSwapchain() {

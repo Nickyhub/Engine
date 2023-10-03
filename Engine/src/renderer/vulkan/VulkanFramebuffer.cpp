@@ -29,5 +29,5 @@ VulkanFramebuffer::VulkanFramebuffer(const VulkanFramebufferConfig& config)
 
 VulkanFramebuffer::~VulkanFramebuffer() {
 	vkDestroyFramebuffer(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
-	EN_INFO("Vulkan framebuffer destroyed.");
+	EN_DEBUG("Vulkan framebuffer destroyed.");
 }

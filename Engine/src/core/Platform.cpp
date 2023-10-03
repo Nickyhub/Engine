@@ -1,7 +1,6 @@
 #include "Platform.hpp"
 
 #include <windowsx.h>
-#include <vulkan/vulkan_win32.h>
 #include <stdio.h>
 
 #include "Event.hpp"
@@ -135,26 +134,6 @@ void Platform::logMessage(LogLevel level, const char* message, ...) {
 	size_t length = strlen(message);
 	LPDWORD numberWritten = 0;
 	WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), message, (DWORD)length, numberWritten, 0);
-}
-
-VkSurfaceKHR Platform::createVulkanSurface(const VkInstance& instance, const VkAllocationCallbacks& allocator) {
-	VkWin32SurfaceCreateInfoKHR createInfo = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
-	createInfo.hinstance = m_hInstance;
-	createInfo.hwnd = m_Handle;
-
-	VkSurfaceKHR result;
-	VK_CHECK(vkCreateWin32SurfaceKHR(instance, &createInfo, &allocator, &result));
-	EN_INFO("Surface created.");
-	return result;
-}
-
-void Platform::destroyVulkanSurface(VkSurfaceKHR surface, VkInstance instance, VkAllocationCallbacks* allocator) {
-	EN_DEBUG("Destroying vulkan surface.");
-	if (surface) {
-		vkDestroySurfaceKHR(instance,
-			surface,
-			allocator);
-	}
 }
 
 void Platform::pumpMessages() {

@@ -336,5 +336,5 @@ VulkanPipeline::~VulkanPipeline() {
 
 	vkDestroyPipeline(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
 	vkDestroyPipelineLayout(m_Device.m_LogicalDevice, m_Layout, &m_Allocator);
-	EN_INFO("Vulkan pipeline destroyed.");
+	EN_DEBUG("Vulkan pipeline destroyed.");
 }

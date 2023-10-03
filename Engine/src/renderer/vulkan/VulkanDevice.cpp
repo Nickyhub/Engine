@@ -6,9 +6,9 @@
 #include "core/Platform.hpp"
 
 
-VulkanDevice::VulkanDevice(const VulkanInstance& instance, bool enableSamplerAnisotropy, bool enableFillModeNonSolid)
+VulkanDevice::VulkanDevice(const VulkanSurface& surface, const VulkanInstance& instance, bool enableSamplerAnisotropy, bool enableFillModeNonSolid)
  	: m_Instance(instance),
-	  m_Surface(Platform::createVulkanSurface(instance.getInternal(), *m_Instance.m_Allocator)),
+	  m_Surface(surface),
 	  m_PhysicalDevice(selectPhysicalDevice()) {
 	if (!m_PhysicalDevice) {
 		EN_ERROR("No physical device present.");
@@ -94,9 +94,9 @@ VulkanDevice::VulkanDevice(const VulkanInstance& instance, bool enableSamplerAni
 }
 
 VulkanDevice::~VulkanDevice() {
-	vkDestroyCommandPool(m_LogicalDevice, m_CommandPool, nullptr);
-	vkDestroyDevice(m_LogicalDevice, nullptr);
-	EN_INFO("VulkanDevice destroye.");
+	vkDestroyCommandPool(m_LogicalDevice, m_CommandPool, m_Instance.m_Allocator);
+	vkDestroyDevice(m_LogicalDevice, m_Instance.m_Allocator);
+	EN_DEBUG("VulkanDevice destroyed.");
 }
 
 VkFormat VulkanDevice::findDepthFormat() const {
@@ -234,7 +234,7 @@ bool VulkanDevice::physicalDeviceMeetsRequirements(const VkPhysicalDevice* devic
 			VkBool32 supportsPresent = VK_FALSE;
 			vkGetPhysicalDeviceSurfaceSupportKHR(*device,
 												 i,
-												 m_Surface,
+												 m_Surface.m_Handle,
 												 &supportsPresent);
 			if (supportsPresent) {
 				presentIndex = i;
@@ -266,7 +266,7 @@ bool VulkanDevice::physicalDeviceMeetsRequirements(const VkPhysicalDevice* devic
 			VkBool32 supportsPresent = VK_FALSE;
 			vkGetPhysicalDeviceSurfaceSupportKHR(*device,
 												 i,
-												 m_Surface,
+												 m_Surface.m_Handle,
 												 &supportsPresent);
 			if (supportsPresent) {
 				presentIndex = i;
@@ -376,15 +376,15 @@ bool VulkanDevice::querySwapchainSupport(const VkPhysicalDevice* device) {
 	//std::vector<VkPresentModeKHR> presentModes;
 
 	// Query surface capabilities
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(*device, m_Surface, &capabilities);
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(*device, m_Surface.m_Handle, &capabilities);
 
 	// Query formats
 	unsigned int formatCount;
-	vkGetPhysicalDeviceSurfaceFormatsKHR(*device, m_Surface, &formatCount, 0);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(*device, m_Surface.m_Handle, &formatCount, 0);
 	// Check if formats are available
 	if (formatCount != 0) {
 		m_SwapchainSupportInfo.s_Formats.resize(formatCount);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(*device, m_Surface, &formatCount, m_SwapchainSupportInfo.s_Formats.data());
+		vkGetPhysicalDeviceSurfaceFormatsKHR(*device, m_Surface.m_Handle, &formatCount, m_SwapchainSupportInfo.s_Formats.data());
 	} else {
 		EN_ERROR("Physical device has no surface formats available. Skipping.");
 		return false;
@@ -392,11 +392,11 @@ bool VulkanDevice::querySwapchainSupport(const VkPhysicalDevice* device) {
 
 	// Query present modes
 	unsigned int presentModeCount;
-	vkGetPhysicalDeviceSurfacePresentModesKHR(*device, m_Surface, &presentModeCount, 0);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(*device, m_Surface.m_Handle, &presentModeCount, 0);
 	// Check if present modes are available
 	if (presentModeCount != 0) {
 		m_SwapchainSupportInfo.s_PresentModes.resize(presentModeCount);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(*device, m_Surface, &presentModeCount, m_SwapchainSupportInfo.s_PresentModes.data());
+		vkGetPhysicalDeviceSurfacePresentModesKHR(*device, m_Surface.m_Handle, &presentModeCount, m_SwapchainSupportInfo.s_PresentModes.data());
 	}
 	else {
 		EN_ERROR("Physical device has no surface present modes available. Skipping.");

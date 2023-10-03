@@ -30,7 +30,7 @@ struct VulkanPhysicalDeviceRequirements {
 class VulkanDevice {
 public:
 	VulkanDevice() = delete;
-	VulkanDevice(const VulkanInstance& instance, bool enableSamplerAnisotropy, bool enableFillModeNonSolid);
+	VulkanDevice(const VulkanSurface& surface, const VulkanInstance& instance, bool enableSamplerAnisotropy, bool enableFillModeNonSolid);
 	~VulkanDevice();
 	VkFormat findDepthFormat() const;
 private:
@@ -47,8 +47,8 @@ private:
 	VkQueue m_ComputeQueue = nullptr;
 	VkQueue m_TransferQueue = nullptr;
 public:
+	const VulkanSurface& m_Surface;
 	VkDevice m_LogicalDevice = nullptr;
-	VkSurfaceKHR m_Surface;
 	VulkanDeviceSwapchainSupportInfo m_SwapchainSupportInfo;
 
 	unsigned int m_GraphicsQueueFamilyIndex = INVALID_ID;

@@ -1,4 +1,7 @@
 #pragma once
+
+#include <windows.h>
+
 #include "VulkanPipeline.hpp"
 #include "VulkanBuffer.hpp"
 #include "VulkanImage.hpp"
@@ -9,7 +12,7 @@
 class VulkanRenderer {
 public:
 	VulkanRenderer() = delete;
-	VulkanRenderer(unsigned int width, unsigned int height);
+	VulkanRenderer(HWND windowHandle, HINSTANCE windowsInstance, unsigned int width, unsigned int height);
 	bool beginFrame();
 	bool drawFrame();
 	bool endFrame();
@@ -19,6 +22,7 @@ public:
 
 private:
 	VulkanInstance m_Instance;
+	VulkanSurface m_Surface;
 	VulkanDevice m_Device;
 	VulkanSwapchain m_Swapchain;
 	std::vector<VulkanFramebuffer*> m_Framebuffers;
