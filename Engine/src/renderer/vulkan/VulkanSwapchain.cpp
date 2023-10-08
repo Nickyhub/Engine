@@ -4,8 +4,20 @@
 #include "VulkanUtils.hpp"
 
 VulkanSwapchain::VulkanSwapchain(const VulkanSwapchainConfig& config) :
-m_Device(config.s_Device), m_Allocator(config.s_Allocator) {
+m_Device(config.s_Device), m_Allocator(config.s_Allocator), m_FramesInFlight(config.s_FramesInFlight) {
 	create(config);
+
+	// Create sync objects upon construction so they
+	// wont be unnecessarily destroyed and created 
+	// over and over again when resizing
+	m_ImageAvailableSemaphores.resize(m_FramesInFlight);
+	m_RenderFinishedSemaphores.resize(m_FramesInFlight);
+	m_InFlightFences.resize(m_FramesInFlight);
+	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
+		m_ImageAvailableSemaphores[i] = new VulkanSemaphore(m_Device, m_Allocator);
+		m_RenderFinishedSemaphores[i] = new VulkanSemaphore(m_Device, m_Allocator);
+		m_InFlightFences[i] = new VulkanFence(m_Device, m_Allocator);
+	}
 }
 
 bool VulkanSwapchain::create(const VulkanSwapchainConfig& config) {
@@ -124,21 +136,19 @@ bool VulkanSwapchain::create(const VulkanSwapchainConfig& config) {
 									&m_Allocator, &m_ImageViews[i]));
 	}
 
+	createDepthImage({ (int)config.s_Width,
+	(int)config.s_Height,
+	m_Device.findDepthFormat(),
+	VK_IMAGE_TILING_OPTIMAL,
+	VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+	VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+	m_Device,
+	m_Allocator });
+
 	return true;
 }
 
-void VulkanSwapchain::createSyncObjects(unsigned int framesInFlight) {
-	m_ImageAvailableSemaphores.resize(framesInFlight);
-	m_RenderFinishedSemaphores.resize(framesInFlight);
-	m_InFlightFences.resize(framesInFlight);
-	for (unsigned int i = 0; i < framesInFlight; i++) {
-		m_ImageAvailableSemaphores[i] = new VulkanSemaphore(m_Device, m_Allocator);
-		m_RenderFinishedSemaphores[i] = new VulkanSemaphore(m_Device, m_Allocator);
-		m_InFlightFences[i] = new VulkanFence(m_Device, m_Allocator);
-	}
-}
-
-bool VulkanSwapchain::acquireNextImage() {
+bool VulkanSwapchain::acquireNextImage(const VulkanRenderpass& renderpass) {
 	VkResult result = vkAcquireNextImageKHR(
 		m_Device.m_LogicalDevice,
 		m_Handle,
@@ -148,7 +158,7 @@ bool VulkanSwapchain::acquireNextImage() {
 		&m_CurrentSwapchainImageIndex);
 
 	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
-		if (!recreate({m_Width, m_Height, m_Device, m_Allocator})) {
+		if (!recreate({m_Width, m_Height, m_FramesInFlight, m_Device, m_Allocator}, renderpass)) {
 			EN_ERROR("Failed to recreate Swapchain.");
 			return false;
 		}
@@ -157,7 +167,7 @@ bool VulkanSwapchain::acquireNextImage() {
 	return true;
 }
 
-bool VulkanSwapchain::recreate(const VulkanSwapchainConfig& config) {
+bool VulkanSwapchain::recreate(const VulkanSwapchainConfig& config, const VulkanRenderpass& renderpass) {
 	vkDeviceWaitIdle(m_Device.m_LogicalDevice);
 	destroy();
 	if (!create(config)) {
@@ -165,15 +175,7 @@ bool VulkanSwapchain::recreate(const VulkanSwapchainConfig& config) {
 		return false;
 	}
 
-	// Destroy old framebuffers
-	for (unsigned int i = 0; i < m_ImageCount; i++) {
-
-	}
-
-	// Create framebuffers
-	for (unsigned int i = 0; i < m_ImageCount; i++) {
-		
-	}
+	createFramebuffers(renderpass);
 	return true;
 }
 
@@ -192,24 +194,53 @@ bool VulkanSwapchain::present() {
 	return true;
 }
 
+
+void VulkanSwapchain::createFramebuffers(const VulkanRenderpass& renderpass) {
+	m_Framebuffers.resize(m_ImageCount);
+	for (unsigned int i = 0; i < m_ImageCount; i++) {
+		m_Framebuffers[i] = new VulkanFramebuffer({ m_Width,
+													m_Height,
+													i, 
+													m_Allocator, 
+													m_Device, 
+													*m_DepthImage, 
+													renderpass, 
+													*this});
+	}
+}
+
+void VulkanSwapchain::createDepthImage(const VulkanImageConfig& config) {
+	m_DepthImage = new VulkanImage(config);
+}
+
 void VulkanSwapchain::destroy() {
 	// Destroy image views before destroying the swapchain itself
 	for (unsigned int i = 0; i < m_ImageViewCount; i++) {
 		vkDestroyImageView(m_Device.m_LogicalDevice, m_ImageViews[i], &m_Allocator);
 	}
+
+	for (unsigned int i = 0; i < m_Framebuffers.size(); i++) {
+		delete m_Framebuffers[i];
+	}
+
+	delete m_DepthImage;
+
 	m_Height = 0;
 	m_Width = 0;
 	vkDestroySwapchainKHR(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
 	m_Handle = 0;
 
+
+}
+
+VulkanSwapchain::~VulkanSwapchain() {
+	destroy();
+
+	// Destroy sync objects only upon complete destruction of the swapchain
 	for (unsigned int i = 0; i < m_ImageAvailableSemaphores.size(); i++) {
 		delete m_ImageAvailableSemaphores[i];
 		delete m_RenderFinishedSemaphores[i];
 		delete m_InFlightFences[i];
 	}
 	EN_DEBUG("Vulkan swapchain destroyed.");
-}
-
-VulkanSwapchain::~VulkanSwapchain() {
-	destroy();
 }

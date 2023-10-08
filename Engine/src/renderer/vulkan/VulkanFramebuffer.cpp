@@ -1,6 +1,7 @@
 #include "VulkanFramebuffer.hpp"
 #include "VulkanUtils.hpp"
 #include "VulkanDevice.hpp"
+#include "VulkanSwapchain.hpp"
 
 #include "core/Logger.hpp"
 #include "containers/Array.hpp"

@@ -15,7 +15,7 @@ VulkanRenderer::VulkanRenderer(HWND windowHandle, HINSTANCE windowsInstance, uns
 	m_Instance(),
 	m_Surface(windowHandle, windowsInstance, m_Instance),
 	m_Device(m_Surface, m_Instance, VK_TRUE, VK_TRUE),
-	m_Swapchain({width, height, m_Device, *m_Instance.m_Allocator}),
+	m_Swapchain({width, height, FRAMES_IN_FLIGHT, m_Device, *m_Instance.m_Allocator}),
 	m_VulkanImage({ (int) width,
 					(int)height,
 					VK_FORMAT_R8G8B8A8_SRGB,
@@ -24,60 +24,39 @@ VulkanRenderer::VulkanRenderer(HWND windowHandle, HINSTANCE windowsInstance, uns
 					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					m_Device,
 					*m_Instance.m_Allocator}),
-	m_DepthImage({ (int)width,
-				   (int)height,
-					m_Device.findDepthFormat(),
-					VK_IMAGE_TILING_OPTIMAL,
-					VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-					m_Device,
-					*m_Instance.m_Allocator }),
+
 	m_VertexBuffer(VertexBuffer::generatePlaneData(10, 10, 2, 2),
 		m_Device,
 		*m_Instance.m_Allocator),
 	m_Pipeline({ width,
 				 height,
-				 m_FramesInFlight,
+				 FRAMES_IN_FLIGHT,
 				 m_Swapchain.m_SurfaceFormat.format,
 				 m_VertexBuffer,
 				 m_Device,
 				 *m_Instance.m_Allocator	}),
 	m_IndexBuffer(IndexBuffer::generateExampleIndices(), m_Device, *m_Instance.m_Allocator),
-	m_UniformBuffer(m_FramesInFlight, m_Device, *m_Instance.m_Allocator) {
+	m_UniformBuffer(FRAMES_IN_FLIGHT, m_Device, *m_Instance.m_Allocator) {
 	EN_DEBUG("Intializing Vulkan Renderer...");
 
-	// Create framebuffer and depth image
-	m_Framebuffers.resize(m_Swapchain.m_ImageCount);
-	for (unsigned int i = 0; i < m_Swapchain.m_ImageCount; i++) {
-		m_Framebuffers[i] = new VulkanFramebuffer({ width,
-												   height,
-												   i,
-												   *m_Instance.m_Allocator,
-												   m_Device,
-												   m_DepthImage,
-												   m_Pipeline.m_Renderpass,
-												   m_Swapchain });
-	}
+	m_Swapchain.createFramebuffers(m_Pipeline.m_Renderpass);
 
 	// Create descriptor pool and sets
 	m_Pipeline.createDescriptorPool();
 	m_Pipeline.createDescriptorSets(m_VulkanImage.m_View, m_UniformBuffer, m_VulkanImage.m_Sampler);
 
 	// Create command buffers
-	m_CommandBuffers.resize(m_FramesInFlight);
-	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
+	m_CommandBuffers.resize(FRAMES_IN_FLIGHT);
+	for (unsigned int i = 0; i < FRAMES_IN_FLIGHT; i++) {
 		m_CommandBuffers[i] = new VulkanCommandbuffer(m_Device, m_Device.m_CommandPool);
 	}
-
-	// Create sync objects
-	m_Swapchain.createSyncObjects(m_FramesInFlight);
 }
 
 bool VulkanRenderer::beginFrame() {
 	// Wait for the previous frame to finish
 	vkWaitForFences(m_Device.m_LogicalDevice, 1, &m_Swapchain.m_InFlightFences[m_Swapchain.m_CurrentFrame]->m_Handle, VK_TRUE, UINT64_MAX);
 
-	if (!m_Swapchain.acquireNextImage()) {
+	if (!m_Swapchain.acquireNextImage(m_Pipeline.m_Renderpass)) {
 		EN_DEBUG("Swapchain recreation. Booting.");
 		return false;
 	}
@@ -102,7 +81,7 @@ bool VulkanRenderer::drawFrame() {
 	m_Pipeline.m_Renderpass.begin(m_Swapchain.m_CurrentSwapchainImageIndex,
 								  m_CommandBuffers[m_Swapchain.m_CurrentFrame],
 								  m_Swapchain.m_Extent,
-								  m_Framebuffers);
+								  m_Swapchain.m_Framebuffers);
 	VkViewport viewport{};
 	viewport.x = 0.0f;
 	viewport.y = 0.0f;
@@ -182,21 +161,25 @@ bool VulkanRenderer::endFrame() {
 	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
 		m_Swapchain.recreate({ m_FramebufferWidth,
 							   m_FramebufferHeight,
+							   FRAMES_IN_FLIGHT,
 							   m_Device,
-							   *m_Instance.m_Allocator });
+							   *m_Instance.m_Allocator },
+							   m_Pipeline.m_Renderpass);
 	}
 	else if(result != VK_SUCCESS) {
 		EN_ERROR("vkQueueSubmit failed with result: %s.", VulkanResultString(result, true));
 	}
 
 	m_Swapchain.present();
-	m_Swapchain.m_CurrentFrame = (m_Swapchain.m_CurrentFrame + 1) % m_FramesInFlight;
+	m_Swapchain.m_CurrentFrame = (m_Swapchain.m_CurrentFrame + 1) % FRAMES_IN_FLIGHT;
 	return true;
 }
 
 
 
 bool VulkanRenderer::OnResize(const void* sender, EventContext context, EventType type) {
+	m_Swapchain.m_Width = context.u32[0];
+	m_Swapchain.m_Height = context.u32[1];
 	m_FramebufferWidth = context.u32[0];
 	m_FramebufferHeight = context.u32[1];
 	m_FramebufferGeneration++;
@@ -208,13 +191,8 @@ VulkanRenderer::~VulkanRenderer() {
 	vkDeviceWaitIdle(m_Device.m_LogicalDevice);
 
 	// Destroy command buffers
-	for (unsigned int i = 0; i < m_FramesInFlight; i++) {
+	for (unsigned int i = 0; i < FRAMES_IN_FLIGHT; i++) {
 		delete m_CommandBuffers[i];
-	}
-
-	// Destroy framebuffers
-	for (unsigned int i = 0; i < m_Framebuffers.size(); i++) {
-		delete m_Framebuffers[i];
 	}
 
 	// Destroy debug utils messenger

@@ -9,6 +9,9 @@
 
 #include "core/Event.hpp"
 
+	// How many frames are simultaneously rendered to (right now: double buffering)
+#define FRAMES_IN_FLIGHT 2
+
 class VulkanRenderer {
 public:
 	VulkanRenderer() = delete;
@@ -25,10 +28,6 @@ private:
 	VulkanSurface m_Surface;
 	VulkanDevice m_Device;
 	VulkanSwapchain m_Swapchain;
-	std::vector<VulkanFramebuffer*> m_Framebuffers;
-
-	// How many frames are simultaneously rendered to (right now: double buffering)
-	unsigned int m_FramesInFlight = 2;
 
 	unsigned int m_FramebufferGeneration = 0;
 	unsigned int m_LastFramebufferGeneration = 0;
@@ -38,7 +37,6 @@ private:
 
 	// Textured vulkan image for texturing demonstration purposes
 	VulkanImage m_VulkanImage;
-	VulkanImage m_DepthImage;
 
 	VertexBuffer m_VertexBuffer;
 	VulkanPipeline m_Pipeline;

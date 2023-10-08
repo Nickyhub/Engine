@@ -121,6 +121,7 @@ bool VulkanImage::createImage(const VulkanImageConfig& config) {
 		EN_ERROR("Failed to allocate image memory.");
 		return false;
 	}
+	EN_INFO("Allocated vulkan image memory with address: %p.", &m_Memory);
 
 	vkBindImageMemory(m_Device.m_LogicalDevice, m_Handle, m_Memory, 0);
 	return true;
@@ -297,6 +298,5 @@ VulkanImage::~VulkanImage() {
 	vkDestroyImageView(m_Device.m_LogicalDevice, m_View, &m_Allocator);
 	vkDestroyImage(m_Device.m_LogicalDevice, m_Handle, &m_Allocator);
 	vkFreeMemory(m_Device.m_LogicalDevice, m_Memory, &m_Allocator);
-
 	EN_DEBUG("Vulkan image destroyed.");
 }

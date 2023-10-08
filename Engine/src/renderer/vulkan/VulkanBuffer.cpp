@@ -44,6 +44,7 @@ VulkanBuffer::VulkanBuffer(const VulkanDevice& device,
 		&allocInfo,
 		&m_Allocator,
 		&m_Memory));
+	//EN_INFO("Allocated vulkan memory with address: %p.", &m_Memory);
 	vkBindBufferMemory(m_Device.m_LogicalDevice,
 		m_Handle,
 		m_Memory,
@@ -81,6 +82,7 @@ VulkanBuffer::~VulkanBuffer() {
 	vkFreeMemory(m_Device.m_LogicalDevice,
 		m_Memory,
 		&m_Allocator);
+	//EN_INFO("Freed vulkan memory with address: %p.", &m_Memory);
 }
 
 VertexBuffer::VertexBuffer(std::vector<Vertex>* vertices,

@@ -2,7 +2,8 @@
 #include <vulkan/vulkan.h>
 #include "VulkanRenderpass.hpp"
 #include "VulkanImage.hpp"
-#include "VulkanSwapchain.hpp"
+
+class VulkanSwapchain;
 
 struct VulkanFramebufferConfig {
 	unsigned int s_Width;
